@@ -49,7 +49,7 @@ int ClosestWaypoint(double x, double y, const vector<double> &maps_x,
 	double closestLen = 100000; //large number
 	int closestWaypoint = 0;
 
-	for (int i = 0; i < maps_x.size(); i++) {
+	for (unsigned i = 0; i < maps_x.size(); i++) {
 		double map_x = maps_x[i];
 		double map_y = maps_y[i];
 		double dist = distance(x, y, map_x, map_y);
@@ -170,7 +170,7 @@ int main() {
 	vector<double> map_waypoints_dy;
 
 	// Waypoint map to read from
-	string map_file_ = "../data/highway_map.csv";
+	string map_file_ = "/home/fanta/workspace/CarND-Path-Planning-Project/data/highway_map.csv";
 	// The max s value before wrapping around the track back to 0
 	double max_s = 6945.554;
 
@@ -238,6 +238,18 @@ int main() {
 
 							vector<double> next_x_vals;
 							vector<double> next_y_vals;
+
+							double dist_inc = 0.25;
+							for(int i = 0; i < 50; i++)
+							{
+								double next_s = car_s+(i+1)*dist_inc;
+								double next_d = 6.;
+								vector<double> xy = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+								// next_x_vals.push_back(car_x+(dist_inc*i)*cos(deg2rad(car_yaw)));
+								// next_y_vals.push_back(car_y+(dist_inc*i)*sin(deg2rad(car_yaw)));
+								next_x_vals.push_back(xy[0]);
+								next_y_vals.push_back(xy[1]);
+							}
 
 							// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
 							msgJson["next_x"] = next_x_vals;
