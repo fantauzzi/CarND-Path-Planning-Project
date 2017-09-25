@@ -199,7 +199,7 @@ int main() {
 
 	auto lane = 1;  // Center lane
 
-	auto ref_vel = 49.5;  // mph
+	auto ref_vel = .0;  // mph
 
 	h.onMessage(
 			[&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &lane, &ref_vel](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
@@ -247,7 +247,7 @@ int main() {
 
 							bool too_close= false;
 
-							for (int i=0; i < sensor_fusion.size(); ++i) {
+							for (unsigned i=0; i < sensor_fusion.size(); ++i) {
 								// Is the other car in my same lane?
 								float d= sensor_fusion[i][6];
 								if (d< 4+4*lane && d> 4*lane) {
@@ -258,11 +258,18 @@ int main() {
 
 									check_car_s+=((double)prev_size*.02*check_speed); // TODO fix cast
 									if(check_car_s > car_s && check_car_s-car_s < 30) {
-										ref_vel= 29.5;
+										// ref_vel= 29.5;
 										too_close= true;
 
 									}
 								}
+							}
+
+							if (too_close) {
+								ref_vel-=.224;
+							}
+							else if (ref_vel < 49.5) {
+								ref_vel+=.224;
 							}
 
 							// A list of (x, y) waypoints, to be interpolated with a spline, more widely spaced than previous_path_x[] and previous_path_y[]
@@ -315,7 +322,7 @@ int main() {
 							ptsy.push_back(next_wp1[1]);
 							ptsy.push_back(next_wp2[1]);
 
-							for (int i=0; i<ptsx.size(); ++i) {
+							for (unsigned i=0; i<ptsx.size(); ++i) {
 								// Convert (x, y, theta) from universal to car reference system
 								double shift_x= ptsx[i]-ref_x;
 								double shift_y= ptsy[i]-ref_y;
@@ -333,7 +340,7 @@ int main() {
 							vector<double> next_y_vals;
 
 							// Begin by filling the path with all the points from the previous path
-							for (int i=0; i<previous_path_x.size(); ++i) {
+							for (unsigned i=0; i<previous_path_x.size(); ++i) {
 								next_x_vals.push_back(previous_path_x[i]);
 								next_y_vals.push_back(previous_path_y[i]);
 							}
@@ -346,7 +353,7 @@ int main() {
 							double x_add_on= .0;
 
 							// Complete the planned path with new points
-							for (int i=1; i<=50-previous_path_x.size(); ++i) {
+							for (unsigned i=1; i<=50-previous_path_x.size(); ++i) {
 								double N= target_dist/(.02*ref_vel/2.24);
 								double x_point= x_add_on+target_x/N;
 								double y_point= s(x_point);
