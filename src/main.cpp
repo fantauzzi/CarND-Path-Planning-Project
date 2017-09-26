@@ -234,15 +234,31 @@ int main() {
 							double car_yaw = j[1]["yaw"];
 							double car_speed = j[1]["speed"];
 
-							// Previous path data given to the Planner
+							// Previous path data given to the Planner; item [0] is the closest to the car
 							auto previous_path_x = j[1]["previous_path_x"];
 							auto previous_path_y = j[1]["previous_path_y"];
-							// Previous path's end s and d values
+							// Previous path's end s and d values (corresponding to the last element in previous_path_x[] and previous_path_y[]
 							double end_path_s = j[1]["end_path_s"];
 							double end_path_d = j[1]["end_path_d"];
 
+							/*cout << "size= " << previous_path_x.size() << endl;
+							for (unsigned i=0; i< previous_path_x.size(); ++i) {
+								cout << "x, y= " << previous_path_x[i] << ", " << previous_path_y[i] << endl;
+								auto s_d= getFrenet(previous_path_x[i], previous_path_y[i], car_yaw, map_waypoints_x, map_waypoints_y);
+								cout << "s, d= " << s_d[0] << ", " << s_d[1] << endl;
+							}
+							cout << "Path end s,d= " << end_path_s << ", " << end_path_d << endl;
+							cout << "Car position x, y, s, d= " << car_x << ", " << car_y <<", " <<  car_s <<", " <<  car_d << endl;
+							cout << endl;*/
+
 							// Sensor Fusion Data, a list of all other cars on the same side of the road.
 							auto sensor_fusion = j[1]["sensor_fusion"];
+
+							/*cout << "Counted cars " << sensor_fusion.size() << endl;
+							for (auto item: sensor_fusion)
+									cout << item[0] << endl;
+
+							 cout << endl; */
 
 							int prev_size = previous_path_x.size();
 
@@ -421,6 +437,13 @@ int main() {
 							 next_x_vals.push_back(xy[0]);
 							 next_y_vals.push_back(xy[1]);
 							 } */
+
+							/*cout << "Next path" << endl;
+							for (unsigned i=0; i< next_x_vals.size(); ++i) {
+								auto s_d= getFrenet(next_x_vals[i], next_y_vals[i], car_yaw, map_waypoints_x, map_waypoints_y);
+								cout << "s, d= " << s_d[0] << ", " << s_d[1] << endl;
+							}
+							cout << endl;*/
 
 							// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
 							msgJson["next_x"] = next_x_vals;
