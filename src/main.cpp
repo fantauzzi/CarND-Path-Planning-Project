@@ -159,6 +159,9 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 
 }
 
+// Keep lane, prepare to change lane left, prepare to change lane right, change lane left, change lane right
+enum struct CarState { KL, PLCL, PLCR, CLL, CLR };
+
 int main() {
 	uWS::Hub h;
 
@@ -201,8 +204,10 @@ int main() {
 
 	auto ref_vel = .0;  // mph
 
+	auto car_state = CarState::KL;
+
 	h.onMessage(
-			[&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &lane, &ref_vel](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+			[&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &lane, &ref_vel, &car_state](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 					uWS::OpCode opCode) {
 				// "42" at the start of the message means there's a websocket message event.
 				// The 4 signifies a websocket message
@@ -242,8 +247,35 @@ int main() {
 							int prev_size = previous_path_x.size();
 
 							if (prev_size > 0) {
-								car_s = end_path_s;
+								car_s = end_path_s;  // TODO Why??
 							}
+
+							/*
+							 * States: KL, PLCL, PLCR, CLL, CLR
+							 *
+							 * >> General principle: try to keep the target speed, choosing a lane with no traffic, or the lane with the fastest
+							 * traffic.
+							 * Speed of traffic in your same lane is given by the speed of the car in front of you (if any);
+							 * in a different lane, it is given by the speed of the car in front of the first space where you could move.
+							 *
+							 * A space is available to move into if it is long enough, keeping into account the car length and the
+							 * reaction time given the speed of the car preceding the space, and some buffer (simplification: use reaction
+							 * time for speed=target speed).
+							 *
+							 * >> State machine. If you are not changing lane, keep checking if you should, and in case take action accordingly;
+							 * also, keep distance from the car in front of you (if any). Distance must keep in consideration reaction time
+							 * and speed (simplification: always consider the reaction time for worst case, i.e. speed = target speed).
+							 * If you are changing lane already, carry on with the manoeuvre until completed (improvement:
+							 * abort the manoeuvre if it is getting dangerous).
+							 */
+
+							switch(car_state) {
+							case CarState::KL:
+							case CarState::PLCL:
+							case CarState::PLCR:;
+
+							}
+
 
 							bool too_close= false;
 
