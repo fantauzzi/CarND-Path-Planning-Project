@@ -5,12 +5,14 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <chrono>
 #include "Eigen/Core"
 #include "Eigen/QR"
 #include "json.hpp"
 #include "spline.h"
 
 using namespace std;
+using namespace Eigen;
 
 // for convenience
 using json = nlohmann::json;
@@ -156,7 +158,53 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 	double y = seg_y + d * sin(perp_heading);
 
 	return {x,y};
+}
 
+/* Convenient alias for a type, will hold the 6 coefficients of a quintic function, sorted
+ * from the degree 0 coefficient to the degree 5: a0+a1*x+a2*x^2+a3*x^3+a4*x^4+a5*x^5 .
+ */
+typedef Matrix<double, 6, 1> Vector6d;
+
+/**
+ * Computes the jerk minimising trajectory for the given boundary conditions and time interval.
+ * @param start the starting boundary conditions.
+ * @param goal the ending boundary conditions.
+ * @param t the time interval in seconds to reach the goal from start.
+ * @return the coefficients of a quintic function, providing the requested trajectory, ordered
+ * from the term of degree 0 to the term of degree 5.
+ */
+ Vector6d computeJMT(const Vector3d start, const Vector3d goal, double t) {
+	auto a0=start[0];
+	auto a1=start[1];
+	auto a2=start[2]/2.;
+
+	Matrix3d A;
+	A << pow(t,3), pow(t, 4), pow(t, 5),
+			3*pow(t, 2), 4*pow(t, 3), 5*pow(t, 4),
+			6*t, 12*pow(t,2), 20*pow(t, 3);
+
+	auto c0= a0+a1*t+a2*pow(t,2);
+	auto c1= a1+2*a2*t;
+	auto c2= 2*a2;
+
+	Vector3d b;
+	b << goal[0]-c0, goal[1]-c1, goal[2]-c2;
+
+	Vector3d x=A.colPivHouseholderQr().solve(b);
+	Vector6d result;
+	result << a0, a1, a2, x;
+	return result;
+}
+
+/**
+ * Evaluates the quintic function with the given coefficients in `x`.
+ * @param coeffs the quintic function coefficients, ordered from the term of degree 0 to the term of degree 5.
+ * @param x the value for which to evaluate the quintic function.
+ * @return the computed value.
+ */
+double evalQuintic(Vector6d coeffs, double x) {
+	double result = coeffs[0]+coeffs[1]*x+coeffs[2]*pow(x,2)+coeffs[3]*pow(x,3)+coeffs[4]*pow(x,4)+coeffs[5]*pow(x,5);
+	return result;
 }
 
 // Keep lane, prepare to change lane left, prepare to change lane right, change lane left, change lane right
@@ -206,8 +254,10 @@ int main() {
 
 	auto car_state = CarState::KL;
 
+	auto begin = std::chrono::high_resolution_clock::now();
+	long iterations = 1;
 	h.onMessage(
-			[&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &lane, &ref_vel, &car_state](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+			[&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &lane, &ref_vel, &car_state, &begin, &iterations](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 					uWS::OpCode opCode) {
 				// "42" at the start of the message means there's a websocket message event.
 				// The 4 signifies a websocket message
@@ -225,6 +275,12 @@ int main() {
 
 						if (event == "telemetry") {
 							// j[1] is the data JSON object
+
+							auto end = std::chrono::high_resolution_clock::now();
+							std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(end - begin);
+							// std::cout << "# " << iterations << "  " << time_span.count() << "s" << std::endl;
+							begin = end;
+							++iterations;
 
 							// Main car's localization Data
 							double car_x = j[1]["x"];
@@ -247,7 +303,7 @@ int main() {
 							int prev_size = previous_path_x.size();
 
 							if (prev_size > 0) {
-								car_s = end_path_s;  // TODO Why??
+								car_s = end_path_s;  // Confusing! Not a good idea.
 							}
 
 							/*
@@ -279,23 +335,26 @@ int main() {
 
 							bool too_close= false;
 
+							// For every other car...
 							for (unsigned i=0; i < sensor_fusion.size(); ++i) {
-								// Is the other car in my same lane?
+								// ... which is in the same lane...
 								float d= sensor_fusion[i][6];
 								if (d< 4+4*lane && d> 4*lane) {
+									// ... predict where that car will be one second after the previous iteration (its s coordinate)
 									double vx= sensor_fusion[i][3];
 									double vy= sensor_fusion[i][4];
 									double check_speed= sqrt(vx*vx+vy+vy);
 									double check_car_s= sensor_fusion[i][5];
-
+									// If that car will be in front of my car predicted position, but less than 30 m away, the it is too close!
 									check_car_s+=((double)prev_size*.02*check_speed); // TODO fix cast
 									if(check_car_s > car_s && check_car_s-car_s < 30) {
 										// ref_vel= 29.5;
 										too_close= true;
-
 									}
 								}
 							}
+
+							// If too close to the preceeding car, or too slow, adjust speed
 
 							if (too_close) {
 								ref_vel-=.224;
@@ -308,14 +367,16 @@ int main() {
 							vector<double> ptsx;
 							vector<double> ptsy;
 
-							// reference car pose (x, y, yaw)
+							// Reference car pose (x, y, yaw)
 							double ref_x = car_x;
 							double ref_y = car_y;
 							double ref_yaw = deg2rad(car_yaw);
 
 							// If the previous path doesn't contain at least two points, use the current car pose as reference
 							if (prev_size < 2) {
-								// Path needs to be tangent to the car yaw
+								/* Path needs to be tangent to the car yaw. Find where the car was 1 m before. It's bollocks,
+								 * but anyway this is done only when prev_size<2, which only happens at start (if ever).
+								 */
 								double prev_car_x = car_x - cos(car_yaw);
 								double prev_car_y = car_y - sin(car_yaw);
 
@@ -325,7 +386,8 @@ int main() {
 								ptsy.push_back(prev_car_y);
 								ptsy.push_back(car_y);
 							}
-							// Otherwise use the last to points of the previous path, to get to points defining a line tangent to the car yaw
+							/* Otherwise use the first two points (i.e. the two the most far ahead of the car) of the previous
+							path to define a line tangent to the car yaw. */
 							else {
 
 								ref_x = previous_path_x[prev_size-1];
@@ -342,6 +404,10 @@ int main() {
 								ptsy.push_back(ref_y);
 							}
 
+							/* Get 3 waypoints respectively 30, 60 and 90 m ahead of the car in the lane.
+							 * Note that max speed is 50 mph = 22.4 m/s; therefore the 3 new waypoints should be
+							 * ahead on the road of the 2 waypoints already added to ptsx[] and ptsy[]
+							 */
 							vector<double> next_wp0 = getXY(car_s+30, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 							vector<double> next_wp1 = getXY(car_s+60, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 							vector<double> next_wp2 = getXY(car_s+90, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
@@ -354,8 +420,8 @@ int main() {
 							ptsy.push_back(next_wp1[1]);
 							ptsy.push_back(next_wp2[1]);
 
+							/* Convert the waypoint coordinates from universal to car reference system */
 							for (unsigned i=0; i<ptsx.size(); ++i) {
-								// Convert (x, y, theta) from universal to car reference system
 								double shift_x= ptsx[i]-ref_x;
 								double shift_y= ptsy[i]-ref_y;
 
@@ -363,7 +429,7 @@ int main() {
 								ptsy[i]= (shift_x*sin(-ref_yaw)+shift_y*cos(-ref_yaw));
 							}
 
-							// Instantiate the spline
+							// Define the spline, in the car reference system
 							tk::spline s;
 							s.set_points(ptsx, ptsy);
 
