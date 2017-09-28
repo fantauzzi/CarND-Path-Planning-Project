@@ -160,6 +160,21 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 	return {x,y};
 }
 
+void dump_map_data_from_sd(double max_s, const vector<double> map_waypoints_s, const vector<double> map_waypoints_x, const vector<double> map_waypoints_y) {
+		unsigned n_steps = 100;
+		ofstream outfile ("/home/fanta/workspace/CarND-Path-Planning-Project/data/map_for_sd.txt");
+		assert(outfile.is_open());
+
+		for (unsigned step=1; step<=n_steps; ++step) {
+			auto s=step*max_s/n_steps;
+			auto xy = getXY(s, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			outfile << xy[0] << " " << xy[1] << " " << s << endl;
+
+		}
+		outfile.close();
+	}
+
+
 /* Convenient alias for a type, will hold the 6 coefficients of a quintic function, sorted
  * from the degree 0 coefficient to the degree 5: a0+a1*x+a2*x^2+a3*x^3+a4*x^4+a5*x^5 .
  */
@@ -250,14 +265,18 @@ int main() {
 
 	auto lane = 1;  // Center lane
 
-	auto ref_vel = .0;  // mph
+	auto ref_vel = 22.0;  // m/s
 
 	auto car_state = CarState::KL;
 
 	auto begin = std::chrono::high_resolution_clock::now();
 	long iterations = 1;
+
+	auto accel_s =.0;
+	auto accel_d =.0;
+
 	h.onMessage(
-			[&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &lane, &ref_vel, &car_state, &begin, &iterations](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+			[&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &lane, &ref_vel, &car_state, &begin, &iterations, &accel_s, &accel_d](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 					uWS::OpCode opCode) {
 				// "42" at the start of the message means there's a websocket message event.
 				// The 4 signifies a websocket message
@@ -302,10 +321,20 @@ int main() {
 
 							int prev_size = previous_path_x.size();
 
-							if (prev_size > 0) {
-								car_s = end_path_s;  // Confusing! Not a good idea.
-							}
+							auto target_d = lane*4+2;
 
+							auto initial_s =car_s;
+							auto initial_s_vel = car_speed;
+							auto initial_s_acc = .0;
+							auto target_s = car_s+ref_vel*1.;
+
+
+
+
+
+
+
+#ifdef CICCIO_PASTICCIO
 							/*
 							 * States: KL, PLCL, PLCR, CLL, CLR
 							 *
@@ -325,13 +354,15 @@ int main() {
 							 * abort the manoeuvre if it is getting dangerous).
 							 */
 
+							if (prev_size > 0) {
+								car_s = end_path_s;  // Confusing! Not a good idea.
+							}
+
 							switch(car_state) {
 							case CarState::KL:
 							case CarState::PLCL:
 							case CarState::PLCR:;
-
 							}
-
 
 							bool too_close= false;
 
@@ -354,7 +385,7 @@ int main() {
 								}
 							}
 
-							// If too close to the preceeding car, or too slow, adjust speed
+							// If too close to the preceding car, or too slow, adjust speed
 
 							if (too_close) {
 								ref_vel-=.224;
@@ -471,8 +502,13 @@ int main() {
 								next_x_vals.push_back(x_point);
 								next_y_vals.push_back(y_point);
 							}
-
+#endif
 							json msgJson;
+
+							// The path to be fed to the simulator
+							vector<double> next_x_vals;
+							vector<double> next_y_vals;
+
 
 							// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
 							msgJson["next_x"] = next_x_vals;
