@@ -14,9 +14,8 @@ double distance(double x1, double y1, double x2, double y2);
 int ClosestWaypoint(double x, double y, const std::vector<double> &maps_x,
 		const std::vector<double> &maps_y);
 
-
-int NextWaypoint(double x, double y, double theta, const std::vector<double> &maps_x,
-		const std::vector<double> &maps_y);
+int NextWaypoint(double x, double y, double theta,
+		const std::vector<double> &maps_x, const std::vector<double> &maps_y);
 
 class FrenetCartesianConverter {
 	std::vector<double> maps_s;
@@ -27,7 +26,7 @@ public:
 	FrenetCartesianConverter(const std::vector<double> maps_s,
 			const std::vector<double> maps_x, const std::vector<double> maps_y);
 	std::pair<double, double> getXY(const double s, const double d) const;
-	std::pair<double, double> getFrenet(const double x, const double y, const double theta) const;
+	std::pair<double, double> getFrenet(const double x, const double y,
+			const double theta) const;
 };
-
 

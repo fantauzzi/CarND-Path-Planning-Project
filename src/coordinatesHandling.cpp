@@ -19,7 +19,6 @@ double distance(double x1, double y1, double x2, double y2) {
 	return sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
 }
 
-
 int ClosestWaypoint(double x, double y, const vector<double> &maps_x,
 		const vector<double> &maps_y) {
 
@@ -41,7 +40,6 @@ int ClosestWaypoint(double x, double y, const vector<double> &maps_x,
 
 }
 
-
 int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x,
 		const vector<double> &maps_y) {
 
@@ -62,14 +60,14 @@ int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x,
 
 }
 
-
 FrenetCartesianConverter::FrenetCartesianConverter(
 		const vector<double> maps_s_init, const vector<double> maps_x_init,
 		const vector<double> maps_y_init) :
 		maps_s(maps_s_init), maps_x(maps_x_init), maps_y(maps_y_init) {
 }
 
-pair<double, double> FrenetCartesianConverter::getXY(const double s, const double d) const {
+pair<double, double> FrenetCartesianConverter::getXY(const double s,
+		const double d) const {
 	int prev_wp = -1;
 
 	while (s > maps_s[prev_wp + 1] && (prev_wp < (int) (maps_s.size() - 1))) {
