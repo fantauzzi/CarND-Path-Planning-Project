@@ -54,8 +54,9 @@ Vector6d computeJMT(const Vector3d start, const Vector3d goal, double t) {
 	auto a2 = start[2] / 2.;
 
 	Matrix3d A;
-	A << pow(t, 3), pow(t, 4), pow(t, 5), 3 * pow(t, 2), 4 * pow(t, 3), 5
-			* pow(t, 4), 6 * t, 12 * pow(t, 2), 20 * pow(t, 3);
+	A << pow(t, 3), pow(t, 4), pow(t, 5),
+			3 * pow(t, 2), 4 * pow(t, 3), 5 * pow(t, 4),
+			6 * t, 12 * pow(t, 2), 20 * pow(t, 3);
 
 	auto c0 = a0 + a1 * t + a2 * pow(t, 2);
 	auto c1 = a1 + 2 * a2 * t;
@@ -222,12 +223,32 @@ int main() {
 						 *cout << "accel_s=" << accel_s << " accel_d=" << accel_d << endl << endl;
 						 */
 
+						Vector3d s_start;
+						s_start << car_s, car_v_s, car_accel_s;
+						Vector3d s_goal;
+						s_goal << car_s+2.5, 5, 0;
+						auto sJMT = computeJMT(s_start, s_goal, 1);
+
+						Vector3d d_start;
+						d_start << 6, car_v_d, car_accel_d;
+						Vector3d d_goal;
+						d_goal << 6, 0, 0;
+						auto dJMT = computeJMT(d_start, d_goal, 1);
 
 						// The path to be fed to the simulator
 						vector<double> next_x_vals;
 						vector<double> next_y_vals;
 
-						double dist_inc = 0.30;
+						for (double time=.02; time<=1; time+=.02) {
+							double next_s= evalQuintic(sJMT, time);
+							// double next_d= evalQuintic(dJMT, time);
+							double next_d = 6;
+							auto xy = coord_conv.getXY(next_s, next_d);
+							next_x_vals.push_back(xy.first);
+							next_y_vals.push_back(xy.second);
+						}
+
+						/*double dist_inc = 0.30;
 						for(int i = 0; i < 50; i++)
 						{
 							double next_s = car_s+(i+1)*dist_inc;
@@ -235,7 +256,7 @@ int main() {
 							auto xy = coord_conv.getXY(next_s, next_d);
 							next_x_vals.push_back(xy.first);
 							next_y_vals.push_back(xy.second);
-						}
+						}*/
 
 #ifdef CICCIO_PASTICCIO
 			/*

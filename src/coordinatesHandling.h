@@ -30,9 +30,9 @@ class FrenetCartesianConverter {
 	tk::spline spline_maps_dx;
 	tk::spline spline_maps_dy;
 
+public:
 	std::pair<double, double> getXY2(const double s, const double d) const;
 
-public:
 	FrenetCartesianConverter(const std::vector<double> maps_s,
 			const std::vector<double> maps_x, const std::vector<double> maps_y, const std::vector<double> map_waypoints_dx, const std::vector<double> map_waypoints_dy);
 
