@@ -1,6 +1,7 @@
 #include "coordinatesHandling.h"
-
 #include <cmath>
+#include <iostream>
+#include "spline.h"
 
 using namespace std;
 
@@ -8,16 +9,21 @@ inline constexpr double pi() {
 	return M_PI;
 }
 
+
 inline double deg2rad(double x) {
 	return x * pi() / 180;
 }
+
+
 inline double rad2deg(double x) {
 	return x * 180 / pi();
 }
 
+
 double distance(double x1, double y1, double x2, double y2) {
 	return sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
 }
+
 
 int ClosestWaypoint(double x, double y, const vector<double> &maps_x,
 		const vector<double> &maps_y) {
@@ -35,10 +41,10 @@ int ClosestWaypoint(double x, double y, const vector<double> &maps_x,
 		}
 
 	}
-
 	return closestWaypoint;
 
 }
+
 
 int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x,
 		const vector<double> &maps_y) {
@@ -60,13 +66,19 @@ int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x,
 
 }
 
+
 FrenetCartesianConverter::FrenetCartesianConverter(
 		const vector<double> maps_s_init, const vector<double> maps_x_init,
-		const vector<double> maps_y_init) :
-		maps_s(maps_s_init), maps_x(maps_x_init), maps_y(maps_y_init) {
+		const vector<double> maps_y_init, const std::vector<double> maps_dx_init, const std::vector<double> maps_dy_init) :
+		maps_s(maps_s_init), maps_x(maps_x_init), maps_y(maps_y_init), maps_dx(maps_dx_init), maps_dy(maps_dy_init) {
+	spline_maps_x.set_points(maps_s, maps_x);
+	spline_maps_y.set_points(maps_s, maps_y);
+	spline_maps_dx.set_points(maps_s, maps_dx);
+	spline_maps_dy.set_points(maps_s, maps_dy);
 }
 
-pair<double, double> FrenetCartesianConverter::getXY(const double s,
+
+pair<double, double> FrenetCartesianConverter::getXY2(const double s,
 		const double d) const {
 	int prev_wp = -1;
 
@@ -92,6 +104,22 @@ pair<double, double> FrenetCartesianConverter::getXY(const double s,
 	return {x,y};
 
 }
+
+
+pair<double, double> FrenetCartesianConverter::getXY(const double s,
+		const double d) const {
+	double x0= spline_maps_x(s);
+	double y0= spline_maps_y(s);
+	double dx= spline_maps_dx(s);
+	double dy= spline_maps_dy(s);
+	double x= x0 + d*dx;
+	double y= y0 + d*dy;
+	// auto other_xy = getXY2(s, d);
+	// double err=distance(x, y, other_xy.first, other_xy.second);
+	// cout << "Err= " << err << endl;
+	return {x, y};
+}
+
 
 pair<double, double> FrenetCartesianConverter::getFrenet(double x, double y,
 		double theta) const {
@@ -136,4 +164,3 @@ pair<double, double> FrenetCartesianConverter::getFrenet(double x, double y,
 
 	return {frenet_s,frenet_d};
 }
-

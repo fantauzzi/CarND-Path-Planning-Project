@@ -1,5 +1,5 @@
 #include <fstream>
-#include <math.h>
+#include <cmath>
 #include <uWS/uWS.h>
 #include <chrono>
 #include <iostream>
@@ -33,6 +33,7 @@ string hasData(string s) {
 	}
 	return "";
 }
+
 
 /* Convenient alias for a type, will hold the 6 coefficients of a quintic function, sorted
  * from the degree 0 coefficient to the degree 5: a0+a1*x+a2*x^2+a3*x^3+a4*x^4+a5*x^5 .
@@ -69,6 +70,7 @@ Vector6d computeJMT(const Vector3d start, const Vector3d goal, double t) {
 	return result;
 }
 
+
 /**
  * Evaluates the quintic function with the given coefficients in `x`.
  * @param coeffs the quintic function coefficients, ordered from the term of degree 0 to the term of degree 5.
@@ -81,10 +83,12 @@ double evalQuintic(Vector6d coeffs, double x) {
 	return result;
 }
 
+
 // Keep lane, prepare to change lane left, prepare to change lane right, change lane left, change lane right
 enum struct CarState {
 	KL, PLCL, PLCR, CLL, CLR
 };
+
 
 int main() {
 	uWS::Hub h;
@@ -150,7 +154,7 @@ int main() {
 	bool printed = false;
 
 	FrenetCartesianConverter coord_conv(map_waypoints_s, map_waypoints_x,
-			map_waypoints_y);
+			map_waypoints_y, map_waypoints_dx, map_waypoints_dy);
 
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 			uWS::OpCode opCode) {
