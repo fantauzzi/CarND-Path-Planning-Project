@@ -4,11 +4,11 @@
 #include "spline.h"
 
 // For converting back and forth between radians and degrees.
-inline constexpr double pi();
+constexpr double pi();
 
-inline double deg2rad(double x);
+double deg2rad(double x);
 
-inline double rad2deg(double x);
+double rad2deg(double x);
 
 double distance(double x1, double y1, double x2, double y2);
 
@@ -30,7 +30,7 @@ class FrenetCartesianConverter {
 	tk::spline spline_maps_dx;
 	tk::spline spline_maps_dy;
 
-
+	std::pair<double, double> getXY2(const double s, const double d) const;
 
 public:
 	FrenetCartesianConverter(const std::vector<double> maps_s,
@@ -38,8 +38,8 @@ public:
 
 	std::pair<double, double> getXY(const double s, const double d) const;
 
-	std::pair<double, double> getXY2(const double s, const double d) const;
-
 	std::pair<double, double> getFrenet(const double x, const double y,
 			const double theta) const;
+
+	double getRoadHeading(const double s) const;
 };

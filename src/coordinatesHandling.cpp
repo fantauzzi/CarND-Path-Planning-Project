@@ -5,17 +5,17 @@
 
 using namespace std;
 
-inline constexpr double pi() {
+constexpr double pi() {
 	return M_PI;
 }
 
 
-inline double deg2rad(double x) {
+double deg2rad(double x) {
 	return x * pi() / 180;
 }
 
 
-inline double rad2deg(double x) {
+double rad2deg(double x) {
 	return x * 180 / pi();
 }
 
@@ -102,7 +102,6 @@ pair<double, double> FrenetCartesianConverter::getXY2(const double s,
 	double y = seg_y + d * sin(perp_heading);
 
 	return {x,y};
-
 }
 
 
@@ -163,4 +162,25 @@ pair<double, double> FrenetCartesianConverter::getFrenet(double x, double y,
 	frenet_s += distance(0, 0, proj_x, proj_y);
 
 	return {frenet_s,frenet_d};
+}
+
+/**
+ * Gets the heading of the road at a given `s` coordinate; it is an angle in radians between 0 and 2 times
+ * pi, taken counter-clockwise, with 0 radians corresponding to due East.
+ * @param s the 's' component of the Frenet road coordinate where the heading is desired.
+ * @return the calculated road heading.
+ */
+double FrenetCartesianConverter::getRoadHeading(const double s) const {
+	// Get the direction perpendicular to the road
+	double dx= spline_maps_dx(s);
+	double dy= spline_maps_dy(s);
+	double theta=atan2(dy, dx);
+
+	// Convert it to the road heading (rotate it 90 deg. counterclockwise).
+	theta+=pi()/2; // This is between -pi/2 and 3/2*pi radians
+
+	// Make sure the angle is between 0 and pi radians
+	if (theta<0)
+		theta = 2*pi()+theta;
+	return theta;
 }

@@ -11,7 +11,7 @@
 
 #include "coordinatesHandling.h"
 #include "json.hpp"
-#include "spline.h"
+//#include "spline.h"
 
 using namespace std;
 using namespace Eigen;
@@ -139,16 +139,7 @@ int main() {
 	long iterations = 1;
 
 	// All measures below are in the I.S.
-	double prev_s = -1;
-	double prev_d = -1;
-	double vel_s = .0;
-	double vel_d = .0;
-	double prev_vel_s = .0;
-	double prev_vel_d = .0;
-	double accel_s = .0;
-	double accel_d = .0;
-	double prev_accel_s = .0;
-	double prev_accel_d = .0;
+	double prev_car_speed = -1;
 	// double delta_t = 0.05;
 
 	bool printed = false;
@@ -187,8 +178,11 @@ int main() {
 						double car_y = j[1]["y"];
 						double car_s = j[1]["s"];
 						double car_d = j[1]["d"];
-						double car_yaw = j[1]["yaw"];
-						double car_speed = j[1]["speed"];
+						double car_yaw_deg = j[1]["yaw"];
+						auto car_yaw = deg2rad(car_yaw_deg);
+						double car_speed_mph = j[1]["speed"];
+						auto car_speed= 1609.344*car_speed_mph/3600;
+
 
 						/*auto xy = coord_conv.getXY(car_s, car_d);
 						 double dist=sqrt(pow(car_x-xy.first,2)+pow(car_y-xy.second,2));
@@ -204,17 +198,22 @@ int main() {
 						// Sensor Fusion Data, a list of all other cars on the same side of the road.
 						auto sensor_fusion = j[1]["sensor_fusion"];
 
+						double road_h = coord_conv.getRoadHeading(car_s);
+
+						if (prev_car_speed<0)
+							prev_car_speed=car_s;
+						double car_v_s= car_speed*cos(car_yaw- road_h);
+						double car_v_d= -car_speed*sin(car_yaw-road_h);
+						double car_accel= (car_speed-prev_car_speed)/delta_t;
+						double car_accel_s= car_accel*cos(car_yaw- road_h);
+						double car_accel_d= -car_accel*sin(car_yaw-road_h);
+						prev_car_speed = car_speed;
+
+						cout << "s= " << car_s << "  road heading= " << rad2deg(road_h) << "  yaw= " << rad2deg(car_yaw) << endl;
+						cout << "speed= " << car_speed << "  speed_s= "<< car_v_s << "  speed_d= " << car_v_d << endl;
+						cout << "accel= " << car_accel << "  accel_s= "<< car_accel_s << "  accel_d= " << car_accel_d << endl << endl;
+
 						int prev_size = previous_path_x.size();
-
-						if (prev_s<0)
-						prev_s=car_s;
-						if (prev_d<0)
-						prev_d=car_d;
-
-						vel_s = (car_s-prev_s)/ delta_t;
-						vel_d = (car_d-prev_d)/ delta_t;
-						accel_s = (vel_s - prev_vel_s)/delta_t;
-						accel_d = (vel_d - prev_vel_d)/delta_t;
 
 						/*
 						 *
@@ -223,19 +222,12 @@ int main() {
 						 *cout << "accel_s=" << accel_s << " accel_d=" << accel_d << endl << endl;
 						 */
 
-						// Update previous values with current values, for next iteration
-						prev_s = car_s;
-						prev_d = car_d;
-						prev_vel_s = vel_s;
-						prev_vel_d = vel_d;
-						prev_accel_s = accel_s;
-						prev_accel_d = accel_d;
 
 						// The path to be fed to the simulator
 						vector<double> next_x_vals;
 						vector<double> next_y_vals;
 
-						double dist_inc = 0.25;
+						double dist_inc = 0.30;
 						for(int i = 0; i < 50; i++)
 						{
 							double next_s = car_s+(i+1)*dist_inc;
