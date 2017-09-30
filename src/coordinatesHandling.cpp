@@ -113,9 +113,6 @@ pair<double, double> FrenetCartesianConverter::getXY(const double s,
 	double dy= spline_maps_dy(s);
 	double x= x0 + d*dx;
 	double y= y0 + d*dy;
-	// auto other_xy = getXY2(s, d);
-	// double err=distance(x, y, other_xy.first, other_xy.second);
-	// cout << "Err= " << err << endl;
 	return {x, y};
 }
 

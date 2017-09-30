@@ -141,8 +141,11 @@ int main() {
 	double prev_car_speed = -1;
 	double prev_vel_s = -1;
 	// double delta_t = 0.05;
-	double planning_t = 4; // seconds
-	double target_speed = 13.4;  // m/s, that is 30 mph
+	double planning_t = 2; // seconds
+	double target_speed = 10;  // m/s
+	double max_accel_s = 5;  // m/s
+	double tick = 0.02; // s
+
 
 	FrenetCartesianConverter coord_conv(map_waypoints_s, map_waypoints_x,
 			map_waypoints_y, map_waypoints_dx, map_waypoints_dy);
@@ -219,32 +222,27 @@ int main() {
 
 						cout << "s= " << car_s << "  road heading= " << rad2deg(road_h) << "  yaw= " << rad2deg(car_yaw) << endl;
 						cout << "speed= " << car_speed << "  speed_s= "<< car_vel_s << "  speed_d= " << car_vel_d << endl;
-						cout << "accel= " << car_accel << "  accel_s= "<< car_accel_s << "  accel_d= " << car_accel_d << endl << endl;
+						cout << "accel= " << car_accel << "  accel_s= "<< car_accel_s << "  accel_d= " << car_accel_d << endl;
 
 						// int prev_size = previous_path_x.size();
 
-						/*
-						 *
-						 *cout << "s=" << car_s << " d=" << car_d << endl;
-						 *cout << "vel_s=" << vel_s << " vel_d=" << vel_d << endl;
-						 *cout << "accel_s=" << accel_s << " accel_d=" << accel_d << endl << endl;
-						 */
-
-						// TODO use consecutive values of car_v_s to estimate a consistent car_accel_s
-						// TODO ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-						double max_accel_s = 5;  // m/s
 						double proj_vel_s = car_vel_s + max_accel_s*planning_t;
 						double wanted_accel_s = (proj_vel_s <= target_speed) ? max_accel_s : (target_speed - car_vel_s) / planning_t;
 						Vector3d s_start;
 						s_start << car_s, car_vel_s, car_accel_s;
 						Vector3d s_goal;
-						s_goal << car_s+car_vel_s*planning_t+.5*wanted_accel_s*pow(planning_t,2), car_vel_s+wanted_accel_s*planning_t, (proj_vel_s <= target_speed) ? wanted_accel_s : 0;
+						double acc_goal = (proj_vel_s <= target_speed) ? wanted_accel_s : 0;
+						s_goal << car_s+car_vel_s*planning_t+.5*wanted_accel_s*pow(planning_t,2), car_vel_s+wanted_accel_s*planning_t, acc_goal;
+						//s_goal << car_s+car_vel_s*planning_t+.5*wanted_accel_s*pow(planning_t,2), car_vel_s+wanted_accel_s*planning_t, 0;
+						cout << "start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 						auto sJMT = computeJMT(s_start, s_goal, planning_t);
+						cout << "JMT" << sJMT.transpose() << endl << endl;
 
-						log_file << car_s << " ";
+
+						/*log_file << car_s << " ";
 						log_file << s_start.transpose() << " ";
 						log_file << s_goal.transpose() << " ";
-						log_file << sJMT.transpose() << endl;;
+						log_file << sJMT.transpose() << endl;;*/
 
 						/*
 						Vector3d d_start;
@@ -258,14 +256,38 @@ int main() {
 						vector<double> next_x_vals;
 						vector<double> next_y_vals;
 
-						for (double time=.0; time<planning_t; time+=.02) {
+						unsigned n_waypoints=static_cast<int>(round(planning_t/tick));
+						unsigned n_to_keep = previous_path_x.size()/2;
+
+						vector<double> ss;
+						for (unsigned i_waypoint = 0; i_waypoint<n_waypoints; ++i_waypoint) {
+							if (i_waypoint<n_to_keep) {
+								next_x_vals.push_back(previous_path_x[i_waypoint]);
+								next_y_vals.push_back(previous_path_y[i_waypoint]);
+							}
+							else {
+								double time = tick*i_waypoint;
+								double next_s= evalQuintic(sJMT, time);
+								ss.push_back(next_s);
+								double next_d = 6;
+								auto xy = coord_conv.getXY(next_s, next_d);
+								next_x_vals.push_back(xy.first);
+								next_y_vals.push_back(xy.second);
+							}
+						}
+
+						assert(next_x_vals.size() == n_waypoints);
+						assert(next_y_vals.size() == n_waypoints);
+
+
+						/*for (double time=.02; time<=planning_t; time+=.02) {
 							double next_s= evalQuintic(sJMT, time);
 							// double next_d= evalQuintic(dJMT, time);
-							double next_d = 6;
+							double next_d = car_d;
 							auto xy = coord_conv.getXY(next_s, next_d);
 							next_x_vals.push_back(xy.first);
 							next_y_vals.push_back(xy.second);
-						}
+						}*/
 
 						/*double dist_inc = 0.30;
 						for(int i = 0; i < 50; i++)
@@ -451,6 +473,12 @@ int main() {
 			// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
 			msgJson["next_x"] = next_x_vals;
 			msgJson["next_y"] = next_y_vals;
+			for (auto item: next_x_vals)
+				log_file << item << " ";
+			for (auto item: next_y_vals)
+				log_file << item << " ";
+			log_file << endl;
+
 
 			auto msg = "42[\"control\","+ msgJson.dump()+"]";
 

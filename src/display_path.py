@@ -4,19 +4,24 @@ import numpy as np
 
 
 def main():
-    x, y, s = [], [], []
-    csv_fname = '../data/highway_map.csv'
+    paths_x, paths_y=[], []
+    csv_fname = '../data/log.txt'
     with open(csv_fname) as csv_file:
         reader = csv.reader(csv_file)
         for line in reader:
-            one_x, one_y, one_s, _, _ = line[0].split(sep=' ')
-            x.append(one_x)
-            y.append(one_y)
-            s.append(one_s)
+            items = line[0].split()
+            paths_x.append(items[:200])
+            paths_y.append(items[200:])
 
-    print('Read', len(x), 'lines from input csv file', csv_fname)
+    print('Read', len(paths_x), 'lines from input file', csv_fname)
 
-    fig = plt.figure()
+    for x, y in zip(paths_x, paths_y):
+        fig, ax = plt.subplots()
+        plt.plot(x, y, marker='.')
+        plt.axis('equal')
+        plt.show()
+
+    """fig = plt.figure()
     ax = fig.add_subplot(111)
     plt.plot(x, y, marker='.')
     xy_pairs = zip(x, y)
@@ -25,10 +30,9 @@ def main():
         if count % 10 == 0:
             ax.annotate('{:.0f}'.format(float(the_s)), xy=xy, textcoords='data')
         count += 1
-    plt.show()
+    plt.show()"""
 
-    """
-    txt_fname = '../data/log.txt'
+    """txt_fname = '../data/log.txt'
     lines = []
     with open(txt_fname) as txt_file:
         reader = csv.reader(txt_file)
