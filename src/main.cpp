@@ -6,6 +6,7 @@
 #include <thread>
 #include <vector>
 #include <chrono>
+#include <cassert>
 #include "Eigen/Core"
 #include "Eigen/QR"
 
@@ -105,7 +106,7 @@ int main() {
 	string map_file_ =
 			"/home/fanta/workspace/CarND-Path-Planning-Project/data/highway_map.csv";
 	// The max s value before wrapping around the track back to 0
-	double max_s = 6945.554;
+	// double max_s = 6945.554;
 
 	ifstream in_map_(map_file_.c_str(), ifstream::in);
 
@@ -129,11 +130,8 @@ int main() {
 		map_waypoints_dy.push_back(d_y);
 	}
 
-	auto lane = 1;  // Center lane
-
-	auto ref_vel = 22.0;  // m/s
-
-	auto car_state = CarState::KL;
+	// auto lane = 1;  // Center lane
+	// auto car_state = CarState::KL;
 
 	auto prev_t = std::chrono::high_resolution_clock::now();
 	auto t = prev_t;
@@ -141,12 +139,17 @@ int main() {
 
 	// All measures below are in the I.S.
 	double prev_car_speed = -1;
+	double prev_vel_s = -1;
 	// double delta_t = 0.05;
-
-	bool printed = false;
+	double planning_t = 4; // seconds
+	double target_speed = 13.4;  // m/s, that is 30 mph
 
 	FrenetCartesianConverter coord_conv(map_waypoints_s, map_waypoints_x,
 			map_waypoints_y, map_waypoints_dx, map_waypoints_dy);
+
+	ofstream log_file;
+	log_file.open ("/home/fanta/workspace/CarND-Path-Planning-Project/data/log.txt");
+
 
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 			uWS::OpCode opCode) {
@@ -175,8 +178,8 @@ int main() {
 						++iterations;
 
 						// Main car's localization Data
-						double car_x = j[1]["x"];
-						double car_y = j[1]["y"];
+						// double car_x = j[1]["x"];
+						// double car_y = j[1]["y"];
 						double car_s = j[1]["s"];
 						double car_d = j[1]["d"];
 						double car_yaw_deg = j[1]["yaw"];
@@ -193,8 +196,8 @@ int main() {
 						auto previous_path_x = j[1]["previous_path_x"];
 						auto previous_path_y = j[1]["previous_path_y"];
 						// Previous path's end s and d values (corresponding to the last element in previous_path_x[] and previous_path_y[]
-						double end_path_s = j[1]["end_path_s"];
-						double end_path_d = j[1]["end_path_d"];
+						// double end_path_s = j[1]["end_path_s"];
+						// double end_path_d = j[1]["end_path_d"];
 
 						// Sensor Fusion Data, a list of all other cars on the same side of the road.
 						auto sensor_fusion = j[1]["sensor_fusion"];
@@ -202,19 +205,23 @@ int main() {
 						double road_h = coord_conv.getRoadHeading(car_s);
 
 						if (prev_car_speed<0)
-							prev_car_speed=car_s;
-						double car_v_s= car_speed*cos(car_yaw- road_h);
-						double car_v_d= -car_speed*sin(car_yaw-road_h);
+							prev_car_speed=car_speed;
+						double car_vel_s= car_speed*cos(car_yaw- road_h);
+						double car_vel_d= -car_speed*sin(car_yaw-road_h);
 						double car_accel= (car_speed-prev_car_speed)/delta_t;
-						double car_accel_s= car_accel*cos(car_yaw- road_h);
+						// double car_accel_s= car_accel*cos(car_yaw- road_h);
+						if (prev_vel_s < 0)
+							prev_vel_s = car_vel_s;
+						double car_accel_s= (car_vel_s-prev_vel_s)/ delta_t;
+						prev_vel_s = car_vel_s;
 						double car_accel_d= -car_accel*sin(car_yaw-road_h);
 						prev_car_speed = car_speed;
 
 						cout << "s= " << car_s << "  road heading= " << rad2deg(road_h) << "  yaw= " << rad2deg(car_yaw) << endl;
-						cout << "speed= " << car_speed << "  speed_s= "<< car_v_s << "  speed_d= " << car_v_d << endl;
+						cout << "speed= " << car_speed << "  speed_s= "<< car_vel_s << "  speed_d= " << car_vel_d << endl;
 						cout << "accel= " << car_accel << "  accel_s= "<< car_accel_s << "  accel_d= " << car_accel_d << endl << endl;
 
-						int prev_size = previous_path_x.size();
+						// int prev_size = previous_path_x.size();
 
 						/*
 						 *
@@ -223,23 +230,35 @@ int main() {
 						 *cout << "accel_s=" << accel_s << " accel_d=" << accel_d << endl << endl;
 						 */
 
+						// TODO use consecutive values of car_v_s to estimate a consistent car_accel_s
+						// TODO ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+						double max_accel_s = 5;  // m/s
+						double proj_vel_s = car_vel_s + max_accel_s*planning_t;
+						double wanted_accel_s = (proj_vel_s <= target_speed) ? max_accel_s : (target_speed - car_vel_s) / planning_t;
 						Vector3d s_start;
-						s_start << car_s, car_v_s, car_accel_s;
+						s_start << car_s, car_vel_s, car_accel_s;
 						Vector3d s_goal;
-						s_goal << car_s+2.5, 5, 0;
-						auto sJMT = computeJMT(s_start, s_goal, 1);
+						s_goal << car_s+car_vel_s*planning_t+.5*wanted_accel_s*pow(planning_t,2), car_vel_s+wanted_accel_s*planning_t, (proj_vel_s <= target_speed) ? wanted_accel_s : 0;
+						auto sJMT = computeJMT(s_start, s_goal, planning_t);
 
+						log_file << car_s << " ";
+						log_file << s_start.transpose() << " ";
+						log_file << s_goal.transpose() << " ";
+						log_file << sJMT.transpose() << endl;;
+
+						/*
 						Vector3d d_start;
-						d_start << 6, car_v_d, car_accel_d;
+						d_start << 6, car_vel_d, car_accel_d;
 						Vector3d d_goal;
 						d_goal << 6, 0, 0;
-						auto dJMT = computeJMT(d_start, d_goal, 1);
+						auto dJMT = computeJMT(d_start, d_goal, planning_t);
+						*/
 
 						// The path to be fed to the simulator
 						vector<double> next_x_vals;
 						vector<double> next_y_vals;
 
-						for (double time=.02; time<=1; time+=.02) {
+						for (double time=.0; time<planning_t; time+=.02) {
 							double next_s= evalQuintic(sJMT, time);
 							// double next_d= evalQuintic(dJMT, time);
 							double next_d = 6;
