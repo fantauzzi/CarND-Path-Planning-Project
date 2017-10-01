@@ -58,12 +58,41 @@ int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x,
 
 	double angle = abs(theta - heading);
 
-	if (angle > pi() / 4) {
+	if (angle > pi() / 2) { // TODO Keep an eye here!
 		closestWaypoint++;
 	}
 
 	return closestWaypoint;
 
+}
+
+int NextWaypointExperimental(double x, double y, double theta, const vector<double> & maps_x, const vector<double> & maps_y)
+// By Jeremy Owen
+{
+
+    int closestWaypoint = ClosestWaypoint(x,y,maps_x,maps_y);
+
+    double map_x = maps_x[closestWaypoint];
+    double map_y = maps_y[closestWaypoint];
+
+    double heading = atan2( (map_y-y),(map_x-x) );
+
+    double theta_pos = fmod(theta + (2*pi()),2*pi());
+    double heading_pos = fmod(heading + (2*pi()),2*pi());
+    double angle = abs(theta_pos-heading_pos);
+    if (angle > pi()) {
+        angle = (2*pi()) - angle;
+    }
+
+    // cout << "heading:" << heading << " diff:" << angle << endl;
+
+    if(angle > pi()/2)
+    {
+        closestWaypoint = (closestWaypoint + 1) % maps_x.size();
+
+    }
+
+    return closestWaypoint;
 }
 
 
