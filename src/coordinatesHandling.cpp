@@ -58,7 +58,7 @@ int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x,
 
 	double angle = abs(theta - heading);
 
-	if (angle > pi() / 2) { // TODO Keep an eye here!
+	if (angle > pi() / 4) { // TODO Keep an eye here!
 		closestWaypoint++;
 	}
 

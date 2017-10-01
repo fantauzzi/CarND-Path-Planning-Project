@@ -112,6 +112,11 @@ pair<double, double> car2universal_ref(const pair<double, double> xy, const doub
 	return {x_res, y_res};
 }
 
+bool close_enough(const double a, const double b) {
+	constexpr double tollerance=0.001;
+	if (abs(a-b)<=tollerance) return true;
+	return false;
+}
 
 int main() {
 	uWS::Hub h;
@@ -158,20 +163,23 @@ int main() {
 	auto t= prev_t;
 	long iterations= 1;
 	bool done_once= false;
+	bool issue1= false;
+	bool issue2= false;
 
 	// All measures below are in the I.S.
 	double prev_vel_s = 0;  // Assuming the same as above
 	// double delta_t = 0.05;
-	constexpr double planning_t = 10; // seconds
-	constexpr double target_speed = 21.9;  // m/s
+	constexpr double planning_t = 5; // seconds
+	constexpr double wpoints_t = 3; // seconds
+	constexpr double target_speed = 20.1168;  // m/s = 45 mph
 	constexpr double max_accel_s = 9;  // m/s
 	constexpr double tick = 0.02; // s
 
 	FrenetCartesianConverter coord_conv(map_waypoints_s, map_waypoints_x,
 			map_waypoints_y, map_waypoints_dx, map_waypoints_dy);
 
-	ofstream log_file;
-	log_file.open ("/home/fanta/workspace/CarND-Path-Planning-Project/data/log.txt");
+	// ofstream log_file;
+	// log_file.open ("/home/fanta/workspace/CarND-Path-Planning-Project/data/log.txt");
 
 
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
@@ -211,10 +219,10 @@ int main() {
 						auto car_speed= 1609.344*car_speed_mph/3600;
 
 						// Previous path data given to the Planner; item [0] is the closest to the car
-						auto previous_path_x = j[1]["previous_path_x"];
-						auto previous_path_y = j[1]["previous_path_y"];
+						vector<double> previous_path_x = j[1]["previous_path_x"];
+						vector<double> previous_path_y = j[1]["previous_path_y"];
 						// Previous path's end s and d values (corresponding to the last element in previous_path_x[] and previous_path_y[]
-						// double end_path_s = j[1]["end_path_s"];
+						double end_path_s = j[1]["end_path_s"];
 						// double end_path_d = j[1]["end_path_d"];
 
 						// Sensor Fusion Data, a list of all other cars on the same side of the road.
@@ -246,9 +254,11 @@ int main() {
 
 						Vector3d s_start;  // Initial conditions for s
 						s_start << car_s, car_vel_s, car_accel_s;
+						// s_start << car_s, car_vel_s, 0;
 
 						Vector3d s_goal;  // Goal conditions for s
 						double acc_goal = (proj_vel_s <= target_speed) ? wanted_accel_s : 0;
+						// double acc_goal = 0;
 						s_goal << car_s+car_vel_s*planning_t+.5*wanted_accel_s*pow(planning_t,2), car_vel_s+wanted_accel_s*planning_t, acc_goal;
 						cout << "start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
@@ -261,21 +271,79 @@ int main() {
 						 */
 						vector<pair<double, double>> wpoints;  // Will hold the sampled waypoints
 						// We want one waypoint at the end of every tick, from time 0 to time planning_t
-						unsigned n_wpoints=static_cast<int>(round(planning_t / tick));
-						for (unsigned i_wpoint=0; i_wpoint<n_wpoints; ++i_wpoint) {
+						vector<double> ss;
+						unsigned n_planning_wpoints=static_cast<int>(round(planning_t / tick));
+						double previous_s =-1;
+						for (unsigned i_wpoint=0; i_wpoint<n_planning_wpoints; ++i_wpoint) {
 							double wpoint_t= tick*(i_wpoint+1);
 							double next_s= evalQuintic(sJMT, wpoint_t);
+							ss.push_back(next_s);
+							if (next_s < previous_s && !close_enough(next_s, previous_s))
+								cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
+							if (next_s < car_s && ! close_enough(next_s, car_s))
+								cout << "ERROR: going backward  next_s= " << next_s << "  car_s= " << car_s << endl;
+								issue1=true;
+							if (next_s-car_s> 4*(target_speed *tick*n_planning_wpoints))
+								cout << "ERROR: going too far  next_s= " << next_s << "  car_s= " << car_s << endl;
+								issue2=true;
 							double next_d= 6;
 							auto xy= coord_conv.getXY(next_s, next_d);
 							wpoints.push_back(xy);
 						}
-						assert(wpoints.size()==n_wpoints);
+						//if (issue1 || issue2)
+							//cout << "Issue!" << endl;
+						assert(wpoints.size()==n_planning_wpoints);
 
-						// The path to be fed to the simulator
+						// Number of waypoints to be fed to the simulator
+						const unsigned n_wpoints=static_cast<int>(round(wpoints_t / tick));
+						assert(n_wpoints < n_planning_wpoints);
+
+						/* Find the index of the first waypoint in wpoints[] such that the s coordinate of that
+						 * waypoint is equal to, or greater than, end_path_s
+						 */
+						int first_wpoint_i_past_end=-1;
+						for (unsigned i=0; i<wpoints.size(); ++i)  // TODO consider binary search or use std
+							if (ss[i] >= end_path_s) {
+								first_wpoint_i_past_end= i;
+								break;
+							}
+						if (first_wpoint_i_past_end<0)
+							cout << "Bugger!" << endl;
+						assert(first_wpoint_i_past_end>=0);
+
+						/* Fill it the path (waypoints) to be fed to the simulator
+						 *
+						 */
+
 						vector<double> next_x_vals;
 						vector<double> next_y_vals;
 
-						if (previous_path_x.size()==0 and done_once==false) {
+						unsigned progressive=0;  // Used in the loop below... could do something more elegant.
+						for (unsigned i=0; i<n_wpoints; ++i) {
+							// First copy all unused waypoints from the path at the previous iteration
+							if (i<previous_path_x.size()) {
+								next_x_vals.push_back(previous_path_x[i]);
+								next_y_vals.push_back(previous_path_y[i]);
+							}
+							else {
+								/* If there are not enough unused waypoints from the previous iteration, add as many waypoints as necessary,
+								 * calculated at the current iteration with the JMT. Necessary waypoints are taken from the JMT, starting from
+								 * the one closest to the car and moving away from the car, but such that their s coordinate is not less than
+								 * end_path_s
+								 */
+								if (ss[first_wpoint_i_past_end+progressive] < end_path_s)
+									cout << "ERROR: s is " << ss[first_wpoint_i_past_end+progressive] << "but end_path_s is " << end_path_s << endl;
+								if (first_wpoint_i_past_end+progressive >= wpoints.size())
+									cout << "Oops!" << endl;
+								assert(first_wpoint_i_past_end+progressive < wpoints.size());
+								next_x_vals.push_back(wpoints[first_wpoint_i_past_end+progressive].first);
+								next_y_vals.push_back(wpoints[first_wpoint_i_past_end+progressive].second);
+								++progressive;
+							}
+						}
+
+						/*
+						if (previous_path_x.size()<50) {
 							done_once=true;
 							for (auto wpoint: wpoints) {
 								next_x_vals.push_back(wpoint.first);
@@ -288,16 +356,18 @@ int main() {
 								next_y_vals.push_back(previous_path_y[i]);
 							}
 						}
+						*/
 			json msgJson;
 
-			// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
 			msgJson["next_x"] = next_x_vals;
 			msgJson["next_y"] = next_y_vals;
+
+			/*
 			for (auto item: next_x_vals)
 				log_file << item << " ";
 			for (auto item: next_y_vals)
 				log_file << item << " ";
-			log_file << endl;
+			log_file << endl;*/
 
 			++iterations;
 
