@@ -118,6 +118,7 @@ bool close_enough(const double a, const double b) {
 	return false;
 }
 
+
 int main() {
 	uWS::Hub h;
 
@@ -132,7 +133,7 @@ int main() {
 	string map_file_ =
 			"/home/fanta/workspace/CarND-Path-Planning-Project/data/highway_map.csv";
 	// The max s value before wrapping around the track back to 0
-	// double max_s = 6945.554;
+	constexpr double max_s = 6945.554;
 
 	ifstream in_map_(map_file_.c_str(), ifstream::in);
 
@@ -161,8 +162,8 @@ int main() {
 
 	auto prev_t = std::chrono::high_resolution_clock::now();
 	long iterations = 1;
-	Vector3d last_s_boundary_conditions;  // Initial boundary conditions for s
-	last_s_boundary_conditions << -1, 0, 0;
+	Vector3d last_s_boundary_conditions;
+	bool last_s_boundary_conditions_init = false;
 
 	/**************************************/
 	/* All measures below are in the I.S. */
@@ -178,7 +179,7 @@ int main() {
 	constexpr double target_speed = 15;
 
 	// Maximum acceptable acceleration for the car, will try to reach it to get to target_sped in the shortest time
-	constexpr double max_accel_s = 5;
+	constexpr double max_accel_s = 7;
 
 	// Time interval between two consecutive waypoints, as implemented by the simulator
 	constexpr double tick = 0.02;
@@ -187,10 +188,12 @@ int main() {
 	constexpr double min_trajectory_duration = 0.5;
 
 	FrenetCartesianConverter coord_conv(map_waypoints_s, map_waypoints_x,
-			map_waypoints_y, map_waypoints_dx, map_waypoints_dy);
+			map_waypoints_y, map_waypoints_dx, map_waypoints_dy, max_s);
 
 	// ofstream log_file;
 	// log_file.open ("/home/fanta/workspace/CarND-Path-Planning-Project/data/log.txt");
+
+	//bool jumped = false;
 
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 			uWS::OpCode opCode) {
@@ -210,6 +213,21 @@ int main() {
 
 					if (event == "telemetry") {
 						// j[1] is the data JSON object
+
+						/* Jump to the end of the track
+						if (!jumped) {
+							json msgJson;
+							auto xy = coord_conv.getXY(max_s-400, 6);
+							msgJson["next_x"] = {xy.first };
+							msgJson["next_y"] = {xy.second};
+
+							auto msg = "42[\"control\","+ msgJson.dump()+"]";
+
+							//this_thread::sleep_for(chrono::milliseconds(1000));
+							ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+							jumped= true;
+							return;
+						}*/
 
 						auto current_t = std::chrono::high_resolution_clock::now();
 						std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(current_t - prev_t);
@@ -237,8 +255,9 @@ int main() {
 						auto sensor_fusion = j[1]["sensor_fusion"];
 
 						// Set starting boundary conditions for the first JMT to be calculated
-						if (last_s_boundary_conditions[0]<0) {
+						if (!last_s_boundary_conditions_init) {
 							last_s_boundary_conditions[0] = car_s;
+							last_s_boundary_conditions_init = true;
 							assert(car_speed==.0);
 						}
 
@@ -288,6 +307,8 @@ int main() {
 
 							// Update the boundary conditions to be used at the beginning of the next JMT
 							last_s_boundary_conditions = s_goal;
+							if (last_s_boundary_conditions[0] >= max_s)
+								last_s_boundary_conditions[0]-=max_s;
 
 							// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
 							auto sJMT = computeJMT(s_start, s_goal, planning_t);
@@ -309,8 +330,6 @@ int main() {
 									cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
 								if (next_s < car_s && ! close_enough(next_s, car_s))
 									cout << "ERROR: going backward  next_s= " << next_s << "  car_s= " << car_s << endl;
-								if (next_s-car_s> 4*(target_speed *tick*n_planning_wpoints))
-									cout << "ERROR: going too far  next_s= " << next_s << "  car_s= " << car_s << endl;
 								double next_d= 6;
 								auto xy= coord_conv.getXY(next_s, next_d);
 								wpoints.push_back(xy);

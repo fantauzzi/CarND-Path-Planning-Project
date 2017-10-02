@@ -1,6 +1,7 @@
 #include "coordinatesHandling.h"
 #include <cmath>
 #include <iostream>
+#include <algorithm>
 #include "spline.h"
 
 using namespace std;
@@ -96,10 +97,35 @@ int NextWaypointExperimental(double x, double y, double theta, const vector<doub
 }
 
 
+void wrapForSpline(vector<double> & v, const unsigned n) {
+	assert(n<=v.size());
+
+	vector<double> first_n(begin(v), begin(v)+n);
+	vector<double> last_n(end(v)-n, end(v));
+
+	v.insert(begin(v), begin(last_n), end(last_n));
+	v.insert(end(v), begin(first_n), end(first_n));
+}
+
+
 FrenetCartesianConverter::FrenetCartesianConverter(
 		const vector<double> maps_s_init, const vector<double> maps_x_init,
-		const vector<double> maps_y_init, const std::vector<double> maps_dx_init, const std::vector<double> maps_dy_init) :
-		maps_s(maps_s_init), maps_x(maps_x_init), maps_y(maps_y_init), maps_dx(maps_dx_init), maps_dy(maps_dy_init) {
+		const vector<double> maps_y_init, const std::vector<double> maps_dx_init, const std::vector<double> maps_dy_init, const double max_s_init) :
+		maps_s(maps_s_init), maps_x(maps_x_init), maps_y(maps_y_init), maps_dx(maps_dx_init), maps_dy(maps_dy_init), max_s(max_s_init) {
+	constexpr unsigned n_to_wrap= 5;
+
+	wrapForSpline(maps_s, n_to_wrap);
+	for (unsigned i=0; i< n_to_wrap; ++i) {
+		maps_s[i]-=max_s;
+		maps_s[maps_s.size()-1-i]+= max_s;
+	}
+
+	wrapForSpline(maps_x, n_to_wrap);
+	wrapForSpline(maps_y, n_to_wrap);
+	wrapForSpline(maps_dx, n_to_wrap);
+	wrapForSpline(maps_dy, n_to_wrap);
+
+
 	spline_maps_x.set_points(maps_s, maps_x);
 	spline_maps_y.set_points(maps_s, maps_y);
 	spline_maps_dx.set_points(maps_s, maps_dx);
@@ -136,10 +162,18 @@ pair<double, double> FrenetCartesianConverter::getXY2(const double s,
 
 pair<double, double> FrenetCartesianConverter::getXY(const double s,
 		const double d) const {
-	double x0= spline_maps_x(s);
-	double y0= spline_maps_y(s);
-	double dx= spline_maps_dx(s);
-	double dy= spline_maps_dy(s);
+
+	// Wrap s around the [0, max_s] interval
+	double wrapped_s = s;
+	if (wrapped_s < 0)
+		wrapped_s+=max_s;
+	else if (wrapped_s >= max_s)
+		wrapped_s-=max_s;
+
+	double x0= spline_maps_x(wrapped_s);
+	double y0= spline_maps_y(wrapped_s);
+	double dx= spline_maps_dx(wrapped_s);
+	double dy= spline_maps_dy(wrapped_s);
 	double x= x0 + d*dx;
 	double y= y0 + d*dy;
 	return {x, y};
