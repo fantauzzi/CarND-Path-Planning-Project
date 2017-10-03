@@ -157,26 +157,30 @@ int main() {
 		map_waypoints_dy.push_back(d_y);
 	}
 
-	// auto lane = 1;  // Center lane
+	unsigned lane = 1;  // Center lane
 	// auto car_state = CarState::KL;
 
 	auto prev_t = std::chrono::high_resolution_clock::now();
 	long iterations = 1;
 	Vector3d last_s_boundary_conditions;
-	bool last_s_boundary_conditions_init = false;
+	Vector3d last_d_boundary_conditions;
+	bool last_boundary_conditions_init = false;
 
 	/**************************************/
 	/* All measures below are in the I.S. */
 	/**************************************/
-	double prev_vel_s = 0;
+
+	// Next two used to estimate accelerations; commented out and not using the acceleration at present
+	// double prev_vel_s = 0;
+	// double prev_vel_d = 0;
 
 	// double delta_t = 0.05;
 
 	// Duration of the planned trajectory
-	constexpr double planning_t = 5;
+	constexpr double planning_t = 1;
 
 	// Desired cruise speed, that the car should try to attain and keep
-	constexpr double target_speed = 15;
+	constexpr double target_speed = 21.4579;
 
 	// Maximum acceptable acceleration for the car, will try to reach it to get to target_sped in the shortest time
 	constexpr double max_accel_s = 7;
@@ -212,31 +216,16 @@ int main() {
 					string event = j[0].get<string>();
 
 					if (event == "telemetry") {
-						// j[1] is the data JSON object
-
-						/* Jump to the end of the track
-						if (!jumped) {
-							json msgJson;
-							auto xy = coord_conv.getXY(max_s-400, 6);
-							msgJson["next_x"] = {xy.first };
-							msgJson["next_y"] = {xy.second};
-
-							auto msg = "42[\"control\","+ msgJson.dump()+"]";
-
-							//this_thread::sleep_for(chrono::milliseconds(1000));
-							ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-							jumped= true;
-							return;
-						}*/
-
 						auto current_t = std::chrono::high_resolution_clock::now();
 						std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(current_t - prev_t);
-						double delta_t = time_span.count();
+						// double delta_t = time_span.count();
+						// double delta_t = 0.05;  // TODO decide if I want to keep this, or the actual measurement
+						// cout << "Delta-t= " << delta_t << endl;
 						prev_t = current_t;
 
 						// Main car's localization Data
-						double car_x = j[1]["x"];  // m
-						double car_y = j[1]["y"];  // m
+						// double car_x = j[1]["x"];  // m
+						// double car_y = j[1]["y"];  // m
 						double car_s = j[1]["s"];  // m
 						double car_d = j[1]["d"];  // m
 						double car_yaw_deg = j[1]["yaw"];  // Degrees
@@ -248,27 +237,32 @@ int main() {
 						vector<double> previous_path_x = j[1]["previous_path_x"];
 						vector<double> previous_path_y = j[1]["previous_path_y"];
 						// Previous path's end s and d values (corresponding to the last element in previous_path_x[] and previous_path_y[]
-						double end_path_s = j[1]["end_path_s"];
+						// double end_path_s = j[1]["end_path_s"];
 						// double end_path_d = j[1]["end_path_d"];
 
 						// Sensor Fusion Data, a list of all other cars on the same side of the road.
 						auto sensor_fusion = j[1]["sensor_fusion"];
 
 						// Set starting boundary conditions for the first JMT to be calculated
-						if (!last_s_boundary_conditions_init) {
-							last_s_boundary_conditions[0] = car_s;
-							last_s_boundary_conditions_init = true;
+						if (!last_boundary_conditions_init) {
 							assert(car_speed==.0);
-						}
+							last_s_boundary_conditions[0] = car_s;
+							last_d_boundary_conditions[0] = car_d;
+							last_boundary_conditions_init = true;
+							}
 
 						// Determine road heading, and use it to compute the s and d components of the car velocity
 						double road_h = coord_conv.getRoadHeading(car_s);
 						double car_vel_s= car_speed*cos(car_yaw- road_h);
 						double car_vel_d= -car_speed*sin(car_yaw-road_h);// d=0 on the yellow center line, and increases toward the outer of the track
 
-						// Estimate s component of the car acceleration based on current and previous car velocity along s
-						double car_accel_s= (car_vel_s-prev_vel_s)/ delta_t;
+						/* Estimate s and d components of the car acceleration based on current and previous car velocity along
+						 * s and d respectively.
+						 */
+						/* double car_accel_s= (car_vel_s-prev_vel_s)/ delta_t;
+						double car_accel_d= (car_vel_d-prev_vel_d)/ delta_t;
 						prev_vel_s = car_vel_s;
+						prev_vel_d = car_vel_d; */
 
 						/* Fill in the path (waypoints) to be fed to the simulator. Start by copying all waypoints
 						 * still unused at the current iteration.
@@ -286,9 +280,9 @@ int main() {
 						// cout << "Remaining " << remaining_path_duration << endl;
 						if (remaining_path_duration < min_trajectory_duration) {
 							cout << "Iteration# " << iterations << endl;
-							cout << "s= " << car_s << "  road heading= " << rad2deg(road_h) << "  yaw= " << rad2deg(car_yaw) << endl;
-							cout << "speed= " << car_speed << "  speed_s= "<< car_vel_s << "  speed_d= " << car_vel_d << endl;
-							cout << "  accel_s= "<< car_accel_s << endl;
+							cout << "s=" << car_s << " d=" << car_d << " road heading=" << rad2deg(road_h) << " yaw=" << rad2deg(car_yaw) << endl;
+							cout << "speed=" << car_speed << " speed_s= "<< car_vel_s << " speed_d= " << car_vel_d << endl;
+							// cout << "  accel_s= "<< car_accel_s << endl;
 
 							// Determine boundary conditions for quintic polynomial (car trajectory in Frenet coordinates)
 
@@ -303,16 +297,24 @@ int main() {
 								double s2= (planning_t - tx) * target_speed;
 								s_goal << s1+s2, target_speed, 0;
 							}
-							cout << "start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
+							cout << "s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
+
+							Vector3d d_start = last_d_boundary_conditions;  // Initial conditions for d
+							Vector3d d_goal;  // Goal conditions for d
+							d_goal << 2+lane*4, 0, 0;
+							cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
 							// Update the boundary conditions to be used at the beginning of the next JMT
 							last_s_boundary_conditions = s_goal;
 							if (last_s_boundary_conditions[0] >= max_s)
 								last_s_boundary_conditions[0]-=max_s;
+							last_d_boundary_conditions = d_goal;
 
 							// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
 							auto sJMT = computeJMT(s_start, s_goal, planning_t);
-							cout << "JMT= " << sJMT.transpose() << endl << endl;
+							cout << "sJMT= " << sJMT.transpose() << endl << endl;
+							auto dJMT = computeJMT(d_start, d_goal, planning_t);
+							cout << "dJMT= " << dJMT.transpose() << endl << endl;
 
 							/* Sample waypoints from the trajectory at time intervals of duration tick,
 							 * and store them in Cartesian (universal) coordinates. We want one waypoint at the end of every tick,
@@ -330,7 +332,7 @@ int main() {
 									cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
 								if (next_s < car_s && ! close_enough(next_s, car_s))
 									cout << "ERROR: going backward  next_s= " << next_s << "  car_s= " << car_s << endl;
-								double next_d= 6;
+								double next_d= evalQuintic(dJMT, wpoint_t);
 								auto xy= coord_conv.getXY(next_s, next_d);
 								wpoints.push_back(xy);
 							}
