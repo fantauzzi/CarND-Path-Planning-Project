@@ -6,11 +6,6 @@
 
 using namespace std;
 
-constexpr double pi() {
-	return M_PI;
-}
-
-
 double deg2rad(double x) {
 	return x * pi() / 180;
 }

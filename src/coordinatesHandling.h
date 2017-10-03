@@ -3,8 +3,12 @@
 #include <utility>
 #include "spline.h"
 
+typedef std::pair<double, double> Coordinates;
+
 // For converting back and forth between radians and degrees.
-constexpr double pi();
+constexpr double pi() {
+	return M_PI;
+}
 
 double deg2rad(double x);
 

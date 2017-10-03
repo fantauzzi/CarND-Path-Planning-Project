@@ -11,8 +11,8 @@
 #include "Eigen/QR"
 
 #include "coordinatesHandling.h"
+#include "car.h"
 #include "json.hpp"
-//#include "spline.h"
 
 using namespace std;
 using namespace Eigen;
@@ -118,7 +118,6 @@ bool close_enough(const double a, const double b) {
 	return false;
 }
 
-
 int main() {
 	uWS::Hub h;
 
@@ -158,7 +157,7 @@ int main() {
 	}
 
 	unsigned lane = 1;  // Center lane
-	// auto car_state = CarState::KL;
+	auto car_state = CarState::KL;
 
 	auto prev_t = std::chrono::high_resolution_clock::now();
 	long iterations = 1;
@@ -173,9 +172,7 @@ int main() {
 	// Next two used to estimate accelerations; commented out and not using the acceleration at present
 	// double prev_vel_s = 0;
 	// double prev_vel_d = 0;
-
 	// double delta_t = 0.05;
-
 	// Duration of the planned trajectory
 	constexpr double planning_t = 1;
 
@@ -199,6 +196,9 @@ int main() {
 
 	//bool jumped = false;
 
+	constexpr double sensor_range= 1000;
+
+
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 			uWS::OpCode opCode) {
 		// "42" at the start of the message means there's a websocket message event.
@@ -216,6 +216,15 @@ int main() {
 					string event = j[0].get<string>();
 
 					if (event == "telemetry") {
+						/* - Sense and predict, to anticipate where other cars are gonna be when I reach the end of the current JMT
+						 * - Run the FSM and determine the state for the current iteration.
+						 * - Based on the state, compute one or more trajectories.
+						 * - Choose the trajectory with the lowest cost.
+						 * - Send it to the simulator
+						 */
+
+						// Based on the state, compute one or more trajectories
+
 						auto current_t = std::chrono::high_resolution_clock::now();
 						std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(current_t - prev_t);
 						// double delta_t = time_span.count();
@@ -224,14 +233,14 @@ int main() {
 						prev_t = current_t;
 
 						// Main car's localization Data
-						// double car_x = j[1]["x"];  // m
-						// double car_y = j[1]["y"];  // m
-						double car_s = j[1]["s"];  // m
-						double car_d = j[1]["d"];  // m
-						double car_yaw_deg = j[1]["yaw"];  // Degrees
-						auto car_yaw = deg2rad(car_yaw_deg);  // Converted to radians
-						double car_speed_mph = j[1]["speed"];  // mps
-						auto car_speed= 1609.344*car_speed_mph/3600;  // Converted to m/s
+						double car_x = j[1]["x"];  // m
+						double car_y = j[1]["y"];  // m
+						double car_s = j[1]["s"];// m
+						double car_d = j[1]["d"];// m
+						double car_yaw_deg = j[1]["yaw"];// Degrees
+						auto car_yaw = deg2rad(car_yaw_deg);// Converted to radians
+						double car_speed_mph = j[1]["speed"];// mps
+						auto car_speed= 1609.344*car_speed_mph/3600;// Converted to m/s
 
 						// Previous path data given to the Planner; item [0] is the closest to the car
 						vector<double> previous_path_x = j[1]["previous_path_x"];
@@ -241,7 +250,27 @@ int main() {
 						// double end_path_d = j[1]["end_path_d"];
 
 						// Sensor Fusion Data, a list of all other cars on the same side of the road.
-						auto sensor_fusion = j[1]["sensor_fusion"];
+						vector<vector<double>> sensor_fusion = j[1]["sensor_fusion"];
+						vector<carSensorData> cars;
+						for (auto item: sensor_fusion)
+							if (abs(item[5]-car_s) <= sensor_range)
+								cars.push_back(carSensorData(item, coord_conv));
+
+						/* cout << "=====Sensor fusion" << endl;
+						for (auto item: cars) {
+							cout << item << endl;
+						}
+
+							cout << "id=" << other_car_id << " x=" << other_car_x << " y=" << other_car_y << " vx="
+									<< other_car_vx << " vy=" << other_car_vy << " s=" << other_car_s << " d="
+									<< other_car_d << " dist=" << distance(car_x, car_y, other_car_x, other_car_y) << " s_dis=" << car_s - other_car_s << endl;
+
+							if (other_car_vx==0 && other_car_vy==0 and abs(car_s - other_car_s) < min_dist)
+								min_dist = abs(car_s - other_car_s) ;
+
+							cout << "min dist= " << min_dist << endl;
+
+						}*/
 
 						// Set starting boundary conditions for the first JMT to be calculated
 						if (!last_boundary_conditions_init) {
@@ -249,7 +278,7 @@ int main() {
 							last_s_boundary_conditions[0] = car_s;
 							last_d_boundary_conditions[0] = car_d;
 							last_boundary_conditions_init = true;
-							}
+						}
 
 						// Determine road heading, and use it to compute the s and d components of the car velocity
 						double road_h = coord_conv.getRoadHeading(car_s);
@@ -260,9 +289,9 @@ int main() {
 						 * s and d respectively.
 						 */
 						/* double car_accel_s= (car_vel_s-prev_vel_s)/ delta_t;
-						double car_accel_d= (car_vel_d-prev_vel_d)/ delta_t;
-						prev_vel_s = car_vel_s;
-						prev_vel_d = car_vel_d; */
+						 double car_accel_d= (car_vel_d-prev_vel_d)/ delta_t;
+						 prev_vel_s = car_vel_s;
+						 prev_vel_d = car_vel_d; */
 
 						/* Fill in the path (waypoints) to be fed to the simulator. Start by copying all waypoints
 						 * still unused at the current iteration.
@@ -270,7 +299,6 @@ int main() {
 
 						vector<double> next_x_vals(previous_path_x);
 						vector<double> next_y_vals(previous_path_y);
-
 
 						/* If the trajectory covers less than min_trajectory_duration seconds, then extend it by
 						 * computing a new JMT and stitching it to the end.
@@ -288,9 +316,9 @@ int main() {
 
 							Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 							Vector3d s_goal;// Goal conditions for s
-							double proj_vel_s = s_start[1] + max_accel_s*planning_t;  // TODO take also car_vel_d into account
+							double proj_vel_s = s_start[1] + max_accel_s*planning_t;// TODO take also car_vel_d into account
 							if (proj_vel_s < target_speed)
-								s_goal << s_start[0]+s_start[1]*planning_t+.5*max_accel_s*pow(planning_t,2), proj_vel_s, max_accel_s;
+							s_goal << s_start[0]+s_start[1]*planning_t+.5*max_accel_s*pow(planning_t,2), proj_vel_s, max_accel_s;
 							else {
 								double tx= (target_speed - s_start[1]) / max_accel_s;
 								double s1= s_start[0] + s_start[1]*tx+.5*max_accel_s*pow(tx,2);
@@ -299,15 +327,15 @@ int main() {
 							}
 							cout << "s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
-							Vector3d d_start = last_d_boundary_conditions;  // Initial conditions for d
-							Vector3d d_goal;  // Goal conditions for d
+							Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
+							Vector3d d_goal;// Goal conditions for d
 							d_goal << 2+lane*4, 0, 0;
 							cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
 							// Update the boundary conditions to be used at the beginning of the next JMT
 							last_s_boundary_conditions = s_goal;
 							if (last_s_boundary_conditions[0] >= max_s)
-								last_s_boundary_conditions[0]-=max_s;
+							last_s_boundary_conditions[0]-=max_s;
 							last_d_boundary_conditions = d_goal;
 
 							// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
@@ -329,9 +357,9 @@ int main() {
 								double next_s= evalQuintic(sJMT, wpoint_t);
 								ss.push_back(next_s);
 								if (next_s < previous_s && !close_enough(next_s, previous_s))
-									cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
+								cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
 								if (next_s < car_s && ! close_enough(next_s, car_s))
-									cout << "ERROR: going backward  next_s= " << next_s << "  car_s= " << car_s << endl;
+								cout << "ERROR: going backward  next_s= " << next_s << "  car_s= " << car_s << endl;
 								double next_d= evalQuintic(dJMT, wpoint_t);
 								auto xy= coord_conv.getXY(next_s, next_d);
 								wpoints.push_back(xy);
@@ -346,17 +374,17 @@ int main() {
 							}
 						} // if (remaining_path_duration < min_trajectory_duration)
 
-					json msgJson;
+						json msgJson;
 
-					msgJson["next_x"] = next_x_vals;
-					msgJson["next_y"] = next_y_vals;
+						msgJson["next_x"] = next_x_vals;
+						msgJson["next_y"] = next_y_vals;
 
-					auto msg = "42[\"control\","+ msgJson.dump()+"]";
+						auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
-					++iterations;
+						++iterations;
 
-					//this_thread::sleep_for(chrono::milliseconds(1000));
-					ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+						//this_thread::sleep_for(chrono::milliseconds(1000));
+						ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
 					}
 				} else {
 					// Manual driving
