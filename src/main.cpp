@@ -270,26 +270,27 @@ int main() {
 						double t_to_path_end = tick * previous_path_x.size();
 						int closest_i= -1;
 						double closest_dist=  numeric_limits<double>::max();
-						for (unsigned i=0; i<cars.size(); ++i)  // TODO fix for wrap around the track!
-							if (cars[i].s - car_s>=0 && cars[i].s - car_s < closest_dist && abs(cars[i].d - car_d) < lane_width/2) {
-								closest_dist= cars[i].s - car_s;
+						for (unsigned i=0; i<cars.size(); ++i)  {
+							double separation = -cars[i].measureSeparationFrom(car_s);
+							if (separation >=0 && separation < closest_dist && abs(cars[i].d - car_d) < lane_width/2) {
+								closest_dist= separation;
 								closest_i=i;
 							}
+					}
 
+						/* If the distance is below a certain amount, set the target speed to the speed
+						 * of the preceding car, less some margin; otherwise set the target speed to the max cruise speed
+						 */
 						if (closest_i >= 0 && closest_dist <= 50) {
-							/* If the predicted distance is below a certain amount, set the target speed to the speed
-							 * of the preceding car, less some margin; otherwise set the target speed to the max cruise speed
-							 */
-
-							//  auto sd_velocity= cars[closest_i].getFrenetVelocity();
-							target_speed= sqrt(pow(cars[closest_i].vx,2)+pow(cars[closest_i].vy,2));
-							cout << "*** Target speed now set to " << target_speed << endl;
-						} else {
-							/* set the target speed to the max cruise speed */
-							target_speed= cruise_speed;
-							cout << "*** Target speed now set to cruise speed" << target_speed << endl;
+							target_speed= sqrt(pow(cars[closest_i].vx,2)+pow(cars[closest_i].vy,2))*.99;
+							// cout << "Separation=" << closest_dist << " car#" <<closest_i << " target_speed=" << target_speed << endl;
 						}
+						else
+							target_speed= cruise_speed;
 
+
+						// int flip = static_cast<int>(floor(iterations / 250)) % 2;
+						// target_speed = (flip)? cruise_speed/2 : cruise_speed;
 						// Set starting boundary conditions for the first JMT to be calculated
 						if (!last_boundary_conditions_init) {
 							assert(car_speed==.0);
@@ -297,6 +298,7 @@ int main() {
 							last_d_boundary_conditions[0] = car_d;
 							last_boundary_conditions_init = true;
 						}
+
 
 						// Determine road heading, and use it to compute the s and d components of the car velocity
 						double road_h = coord_conv.getRoadHeading(car_s);
@@ -325,12 +327,13 @@ int main() {
 
 							Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 							Vector3d s_goal;// Goal conditions for s
-							double proj_vel_s = s_start[1] + max_accel_s*planning_t;// TODO take also car_vel_d into account
-							if (proj_vel_s < target_speed)
-							s_goal << s_start[0]+s_start[1]*planning_t+.5*max_accel_s*pow(planning_t,2), proj_vel_s, max_accel_s;
+							int a_sign = (target_speed > s_start[1])? 1 : -1;
+							double proj_vel_s = s_start[1] + a_sign*max_accel_s*planning_t;// TODO take also car_vel_d into account
+							if ((a_sign > 0 && proj_vel_s < target_speed) || (a_sign < 0 && proj_vel_s > target_speed))
+								s_goal << s_start[0]+s_start[1]*planning_t+.5*(a_sign)*max_accel_s*pow(planning_t,2), proj_vel_s, a_sign*max_accel_s;
 							else {
-								double tx= (target_speed - s_start[1]) / max_accel_s;
-								double s1= s_start[0] + s_start[1]*tx+.5*max_accel_s*pow(tx,2);
+								double tx= a_sign*(target_speed - s_start[1]) / max_accel_s;
+								double s1= s_start[0] + s_start[1]*tx+.5*a_sign*max_accel_s*pow(tx,2);
 								double s2= (planning_t - tx) * target_speed;
 								s_goal << s1+s2, target_speed, 0;
 							}
@@ -344,7 +347,7 @@ int main() {
 							// Update the boundary conditions to be used at the beginning of the next JMT
 							last_s_boundary_conditions = s_goal;
 							if (last_s_boundary_conditions[0] >= max_s)
-							last_s_boundary_conditions[0]-=max_s;
+								last_s_boundary_conditions[0]-=max_s;
 							last_d_boundary_conditions = d_goal;
 
 							// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
