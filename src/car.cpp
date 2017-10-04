@@ -73,3 +73,7 @@ Coordinates carSensorData::predictFrenet(double dt) const {
 	const double d_pred = d+sd_vel.second * dt;
 	return { s_pred, d_pred };
 }
+
+double carSensorData::measure_sSeparationFrom(const double other_s) const {
+	return other_s - s;
+}

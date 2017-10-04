@@ -7,6 +7,7 @@
 #include <vector>
 #include <chrono>
 #include <cassert>
+#include <limits>
 #include "Eigen/Core"
 #include "Eigen/QR"
 
@@ -176,8 +177,8 @@ int main() {
 	// Duration of the planned trajectory
 	constexpr double planning_t = 1;
 
-	// Desired cruise speed, that the car should try to attain and keep
-	constexpr double target_speed = 21.4579;
+	// Desired cruise speed, that the behaviour planning shall try to attain and keep
+	constexpr double cruise_speed = 21.4579;
 
 	// Maximum acceptable acceleration for the car, will try to reach it to get to target_sped in the shortest time
 	constexpr double max_accel_s = 7;
@@ -188,6 +189,10 @@ int main() {
 	// When the planned trajectory yet to be run goes under this duration, extend it by planning a new trajectory
 	constexpr double min_trajectory_duration = 0.5;
 
+	// Yes, the lane width
+	constexpr double lane_width = 4;
+
+
 	FrenetCartesianConverter coord_conv(map_waypoints_s, map_waypoints_x,
 			map_waypoints_y, map_waypoints_dx, map_waypoints_dy, max_s);
 
@@ -196,8 +201,10 @@ int main() {
 
 	//bool jumped = false;
 
-	constexpr double sensor_range= 1000;
+	constexpr double sensor_range= 300;
 
+	// The speed the car tries to attain and maintain, can change at every iteration based on behaviour planning
+	double target_speed = 21.4579;
 
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 			uWS::OpCode opCode) {
@@ -256,21 +263,32 @@ int main() {
 							if (abs(item[5]-car_s) <= sensor_range)
 								cars.push_back(carSensorData(item, coord_conv));
 
-						/* cout << "=====Sensor fusion" << endl;
-						for (auto item: cars) {
-							cout << item << endl;
+						/* Find the closest car preceding in the same lane, if any within sensors range
+						 */
+
+						// Calculate how much time (in s) before the car reaches the end of its current planned path
+						double t_to_path_end = tick * previous_path_x.size();
+						int closest_i= -1;
+						double closest_dist=  numeric_limits<double>::max();
+						for (unsigned i=0; i<cars.size(); ++i)  // TODO fix for wrap around the track!
+							if (cars[i].s - car_s>=0 && cars[i].s - car_s < closest_dist && abs(cars[i].d - car_d) < lane_width/2) {
+								closest_dist= cars[i].s - car_s;
+								closest_i=i;
+							}
+
+						if (closest_i >= 0 && closest_dist <= 50) {
+							/* If the predicted distance is below a certain amount, set the target speed to the speed
+							 * of the preceding car, less some margin; otherwise set the target speed to the max cruise speed
+							 */
+
+							//  auto sd_velocity= cars[closest_i].getFrenetVelocity();
+							target_speed= sqrt(pow(cars[closest_i].vx,2)+pow(cars[closest_i].vy,2));
+							cout << "*** Target speed now set to " << target_speed << endl;
+						} else {
+							/* set the target speed to the max cruise speed */
+							target_speed= cruise_speed;
+							cout << "*** Target speed now set to cruise speed" << target_speed << endl;
 						}
-
-							cout << "id=" << other_car_id << " x=" << other_car_x << " y=" << other_car_y << " vx="
-									<< other_car_vx << " vy=" << other_car_vy << " s=" << other_car_s << " d="
-									<< other_car_d << " dist=" << distance(car_x, car_y, other_car_x, other_car_y) << " s_dis=" << car_s - other_car_s << endl;
-
-							if (other_car_vx==0 && other_car_vy==0 and abs(car_s - other_car_s) < min_dist)
-								min_dist = abs(car_s - other_car_s) ;
-
-							cout << "min dist= " << min_dist << endl;
-
-						}*/
 
 						// Set starting boundary conditions for the first JMT to be calculated
 						if (!last_boundary_conditions_init) {
@@ -284,14 +302,6 @@ int main() {
 						double road_h = coord_conv.getRoadHeading(car_s);
 						double car_vel_s= car_speed*cos(car_yaw- road_h);
 						double car_vel_d= -car_speed*sin(car_yaw-road_h);// d=0 on the yellow center line, and increases toward the outer of the track
-
-						/* Estimate s and d components of the car acceleration based on current and previous car velocity along
-						 * s and d respectively.
-						 */
-						/* double car_accel_s= (car_vel_s-prev_vel_s)/ delta_t;
-						 double car_accel_d= (car_vel_d-prev_vel_d)/ delta_t;
-						 prev_vel_s = car_vel_s;
-						 prev_vel_d = car_vel_d; */
 
 						/* Fill in the path (waypoints) to be fed to the simulator. Start by copying all waypoints
 						 * still unused at the current iteration.
@@ -310,7 +320,6 @@ int main() {
 							cout << "Iteration# " << iterations << endl;
 							cout << "s=" << car_s << " d=" << car_d << " road heading=" << rad2deg(road_h) << " yaw=" << rad2deg(car_yaw) << endl;
 							cout << "speed=" << car_speed << " speed_s= "<< car_vel_s << " speed_d= " << car_vel_d << endl;
-							// cout << "  accel_s= "<< car_accel_s << endl;
 
 							// Determine boundary conditions for quintic polynomial (car trajectory in Frenet coordinates)
 

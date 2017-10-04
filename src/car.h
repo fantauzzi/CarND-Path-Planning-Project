@@ -18,4 +18,5 @@ struct carSensorData {
 	double getSpeed() const;
 	double getYaw() const;
 	Coordinates predictFrenet(double dt) const;
+	double measure_sSeparationFrom(const double s) const;
 };
