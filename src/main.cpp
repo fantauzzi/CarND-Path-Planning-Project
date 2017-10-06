@@ -263,35 +263,18 @@ int main() {
 							if (abs(item[5]-car_s) <= sensor_range)
 								cars.push_back(carSensorData(item, coord_conv));
 
-						/* Find the closest car preceding in the same lane, if any within sensors range
+						/* If state is KL:
+						 * - find closest vehicle preceding in same lane
+						 * - if close enough, adjust target_speed to that vehicle speed
+						 * - if slower than me, look for possibility to change lane, i.e.:
+						 * - find closest vehicle preceding in adjacent lane;
+						 * - find closest vehicle following in the same adjacent lane;
+						 * - if two vehicles are out of the way, transition to CLL/CLR (if two lanes are available for change, choose
+						 *   the one without traffic, or else the one with the fastest traffic)
+						 * - if still in KL state, when necessary plan new trajectory to keep lane
 						 */
 
-						// Calculate how much time (in s) before the car reaches the end of its current planned path
-						double t_to_path_end = tick * previous_path_x.size();
-						int closest_i= -1;
-						double closest_dist=  numeric_limits<double>::max();
-						for (unsigned i=0; i<cars.size(); ++i)  {
-							double separation = -cars[i].measureSeparationFrom(car_s);
-							if (separation >=0 && separation < closest_dist && abs(cars[i].d - car_d) < lane_width/2) {
-								closest_dist= separation;
-								closest_i=i;
-							}
-					}
-
-						/* If the distance is below a certain amount, set the target speed to the speed
-						 * of the preceding car, less some margin; otherwise set the target speed to the max cruise speed
-						 */
-						if (closest_i >= 0 && closest_dist <= 50) {
-							target_speed= sqrt(pow(cars[closest_i].vx,2)+pow(cars[closest_i].vy,2))*.99;
-							// cout << "Separation=" << closest_dist << " car#" <<closest_i << " target_speed=" << target_speed << endl;
-						}
-						else
-							target_speed= cruise_speed;
-
-
-						// int flip = static_cast<int>(floor(iterations / 250)) % 2;
-						// target_speed = (flip)? cruise_speed/2 : cruise_speed;
-						// Set starting boundary conditions for the first JMT to be calculated
+						// Initialise last_boundary_conditions at the first iteration (beginning of the simulation)
 						if (!last_boundary_conditions_init) {
 							assert(car_speed==.0);
 							last_s_boundary_conditions[0] = car_s;
@@ -299,92 +282,123 @@ int main() {
 							last_boundary_conditions_init = true;
 						}
 
-
-						// Determine road heading, and use it to compute the s and d components of the car velocity
-						double road_h = coord_conv.getRoadHeading(car_s);
-						double car_vel_s= car_speed*cos(car_yaw- road_h);
-						double car_vel_d= -car_speed*sin(car_yaw-road_h);// d=0 on the yellow center line, and increases toward the outer of the track
-
 						/* Fill in the path (waypoints) to be fed to the simulator. Start by copying all waypoints
 						 * still unused at the current iteration.
 						 */
-
 						vector<double> next_x_vals(previous_path_x);
 						vector<double> next_y_vals(previous_path_y);
+
+						// Time left before the car will gobble up the current path (in seconds)
+						const double remaining_path_duration = previous_path_x.size()*tick;
+
+						switch(car_state) {
+						case CarState::KL:
+							// Find the closest vehicle in range preceding in the same lane (if any)
+							int closest_i= -1;  // Will be the position in cars[] of the found vehicle (if found)
+							double closest_dist=  numeric_limits<double>::max();
+							for (unsigned i=0; i<cars.size(); ++i)  {
+								double separation = -cars[i].measureSeparationFrom(car_s);
+								if (separation >=0 && separation < closest_dist && abs(cars[i].d - car_d) < lane_width/2) {
+									closest_dist= separation;
+									closest_i=i;
+								}
+							}
+
+							/* If the distance is below a certain amount, set the target speed to the speed
+							 * of the preceding car, less some margin; otherwise set the target speed to the max cruise speed
+							 */
+							if (closest_i >= 0 && closest_dist <= 50) {
+								target_speed= min(sqrt(pow(cars[closest_i].vx,2)+pow(cars[closest_i].vy,2))*.99, cruise_speed);
+								// cout << "Separation=" << closest_dist << " car#" <<closest_i << " target_speed=" << target_speed << endl;
+							}
+							else
+								target_speed= cruise_speed;
+							if (remaining_path_duration < min_trajectory_duration) {
+								cout << "Iteration# " << iterations << endl;
+								cout << "s=" << car_s << " d=" << car_d << " yaw=" << rad2deg(car_yaw) << endl;
+								cout << "speed=" << car_speed << endl;
+
+								// Determine boundary conditions for quintic polynomial (car trajectory in Frenet coordinates)
+
+								Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
+								Vector3d s_goal;// Goal conditions for s
+								int a_sign = (target_speed > s_start[1])? 1 : -1;
+								double proj_vel_s = s_start[1] + a_sign*max_accel_s*planning_t;
+								if ((a_sign > 0 && proj_vel_s < target_speed) || (a_sign < 0 && proj_vel_s > target_speed))
+									s_goal << s_start[0]+s_start[1]*planning_t+.5*(a_sign)*max_accel_s*pow(planning_t,2), proj_vel_s, a_sign*max_accel_s;
+								else {
+									double tx= a_sign*(target_speed - s_start[1]) / max_accel_s;
+									double s1= s_start[0] + s_start[1]*tx+.5*a_sign*max_accel_s*pow(tx,2);
+									double s2= (planning_t - tx) * target_speed;
+									s_goal << s1+s2, target_speed, 0;
+								}
+								cout << "s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
+
+								Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
+								Vector3d d_goal;// Goal conditions for d
+								d_goal << 2+lane*4, 0, 0;
+								cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
+
+								// Update the boundary conditions to be used at the beginning of the next JMT
+								last_s_boundary_conditions = s_goal;
+								if (last_s_boundary_conditions[0] >= max_s)
+									last_s_boundary_conditions[0]-=max_s;
+								last_d_boundary_conditions = d_goal;
+
+								// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
+								auto sJMT = computeJMT(s_start, s_goal, planning_t);
+								cout << "sJMT= " << sJMT.transpose() << endl << endl;
+								auto dJMT = computeJMT(d_start, d_goal, planning_t);
+								cout << "dJMT= " << dJMT.transpose() << endl << endl;
+
+								/* Sample waypoints from the trajectory at time intervals of duration tick,
+								 * and store them in Cartesian (universal) coordinates. We want one waypoint at the end of every tick,
+								 * from time 0 to time planning_t
+								 */
+								vector<pair<double, double>> wpoints; // Will hold the sampled waypoints
+								vector<double> ss;
+								unsigned n_planning_wpoints=static_cast<int>(round(planning_t / tick));
+								double previous_s =-1;
+								for (unsigned i_wpoint=0; i_wpoint<n_planning_wpoints; ++i_wpoint) {
+									double wpoint_t= tick*(i_wpoint+1);
+									double next_s= evalQuintic(sJMT, wpoint_t);
+									ss.push_back(next_s);
+									if (next_s < previous_s && !close_enough(next_s, previous_s))
+									cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
+									if (next_s < car_s && ! close_enough(next_s, car_s))
+									cout << "ERROR: going backward  next_s= " << next_s << "  car_s= " << car_s << endl;
+									double next_d= evalQuintic(dJMT, wpoint_t);
+									auto xy= coord_conv.getXY(next_s, next_d);
+									wpoints.push_back(xy);
+								}
+								assert(wpoints.size()==n_planning_wpoints);
+
+								// Next add waypoints from the just computed JMT
+
+								for (auto wpoint: wpoints) {
+									next_x_vals.push_back(wpoint.first);
+									next_y_vals.push_back(wpoint.second);
+								}
+							} // if (remaining_path_duration < min_trajectory_duration)
+
+						}
+
+
+						/* If state is CLL/CLR:
+						 * - when necessary, compute new trajectory to change lane
+						 */
+
+						/* Find the closest car preceding in the same lane, if any within sensors range
+						 */
+
+						// Determine road heading, and use it to compute the s and d components of the car velocity
+						/*double road_h = coord_conv.getRoadHeading(car_s);
+						double car_vel_s= car_speed*cos(car_yaw- road_h);
+						double car_vel_d= -car_speed*sin(car_yaw-road_h);// d=0 on the yellow center line, and increases toward the outer of the track*/
 
 						/* If the trajectory covers less than min_trajectory_duration seconds, then extend it by
 						 * computing a new JMT and stitching it to the end.
 						 */
-
-						const double remaining_path_duration = previous_path_x.size()*tick;
-						// cout << "Remaining " << remaining_path_duration << endl;
-						if (remaining_path_duration < min_trajectory_duration) {
-							cout << "Iteration# " << iterations << endl;
-							cout << "s=" << car_s << " d=" << car_d << " road heading=" << rad2deg(road_h) << " yaw=" << rad2deg(car_yaw) << endl;
-							cout << "speed=" << car_speed << " speed_s= "<< car_vel_s << " speed_d= " << car_vel_d << endl;
-
-							// Determine boundary conditions for quintic polynomial (car trajectory in Frenet coordinates)
-
-							Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
-							Vector3d s_goal;// Goal conditions for s
-							int a_sign = (target_speed > s_start[1])? 1 : -1;
-							double proj_vel_s = s_start[1] + a_sign*max_accel_s*planning_t;// TODO take also car_vel_d into account
-							if ((a_sign > 0 && proj_vel_s < target_speed) || (a_sign < 0 && proj_vel_s > target_speed))
-								s_goal << s_start[0]+s_start[1]*planning_t+.5*(a_sign)*max_accel_s*pow(planning_t,2), proj_vel_s, a_sign*max_accel_s;
-							else {
-								double tx= a_sign*(target_speed - s_start[1]) / max_accel_s;
-								double s1= s_start[0] + s_start[1]*tx+.5*a_sign*max_accel_s*pow(tx,2);
-								double s2= (planning_t - tx) * target_speed;
-								s_goal << s1+s2, target_speed, 0;
-							}
-							cout << "s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
-
-							Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
-							Vector3d d_goal;// Goal conditions for d
-							d_goal << 2+lane*4, 0, 0;
-							cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
-
-							// Update the boundary conditions to be used at the beginning of the next JMT
-							last_s_boundary_conditions = s_goal;
-							if (last_s_boundary_conditions[0] >= max_s)
-								last_s_boundary_conditions[0]-=max_s;
-							last_d_boundary_conditions = d_goal;
-
-							// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
-							auto sJMT = computeJMT(s_start, s_goal, planning_t);
-							cout << "sJMT= " << sJMT.transpose() << endl << endl;
-							auto dJMT = computeJMT(d_start, d_goal, planning_t);
-							cout << "dJMT= " << dJMT.transpose() << endl << endl;
-
-							/* Sample waypoints from the trajectory at time intervals of duration tick,
-							 * and store them in Cartesian (universal) coordinates. We want one waypoint at the end of every tick,
-							 * from time 0 to time planning_t
-							 */
-							vector<pair<double, double>> wpoints; // Will hold the sampled waypoints
-							vector<double> ss;
-							unsigned n_planning_wpoints=static_cast<int>(round(planning_t / tick));
-							double previous_s =-1;
-							for (unsigned i_wpoint=0; i_wpoint<n_planning_wpoints; ++i_wpoint) {
-								double wpoint_t= tick*(i_wpoint+1);
-								double next_s= evalQuintic(sJMT, wpoint_t);
-								ss.push_back(next_s);
-								if (next_s < previous_s && !close_enough(next_s, previous_s))
-								cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
-								if (next_s < car_s && ! close_enough(next_s, car_s))
-								cout << "ERROR: going backward  next_s= " << next_s << "  car_s= " << car_s << endl;
-								double next_d= evalQuintic(dJMT, wpoint_t);
-								auto xy= coord_conv.getXY(next_s, next_d);
-								wpoints.push_back(xy);
-							}
-							assert(wpoints.size()==n_planning_wpoints);
-
-							// Next add waypoints from the just computed JMT
-
-							for (auto wpoint: wpoints) {
-								next_x_vals.push_back(wpoint.first);
-								next_y_vals.push_back(wpoint.second);
-							}
-						} // if (remaining_path_duration < min_trajectory_duration)
 
 						json msgJson;
 
