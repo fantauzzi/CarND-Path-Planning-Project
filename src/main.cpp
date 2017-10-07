@@ -10,10 +10,10 @@
 #include <limits>
 #include "Eigen/Core"
 #include "Eigen/QR"
-
 #include "coordinatesHandling.h"
 #include "car.h"
 #include "json.hpp"
+#include "FSM.h"
 
 using namespace std;
 using namespace Eigen;
@@ -39,44 +39,6 @@ string hasData(string s) {
 	return "";
 }
 
-
-/* Convenient alias for a type, will hold the 6 coefficients of a quintic function, sorted
- * from the degree 0 coefficient to the degree 5: a0+a1*x+a2*x^2+a3*x^3+a4*x^4+a5*x^5 .
- */
-typedef Matrix<double, 6, 1> Vector6d;
-
-
-/**
- * Computes the jerk minimising trajectory for the given boundary conditions and time interval.
- * @param start the starting boundary conditions.
- * @param goal the ending boundary conditions.
- * @param t the time interval in seconds to reach the goal from start.
- * @return the coefficients of a quintic function, providing the requested trajectory, ordered
- * from the term of degree 0 to the term of degree 5.
- */
-Vector6d computeJMT(const Vector3d start, const Vector3d goal, double t) {
-	auto a0 = start[0];
-	auto a1 = start[1];
-	auto a2 = start[2] / 2.;
-
-	Matrix3d A;
-	A << pow(t, 3), pow(t, 4), pow(t, 5), 3 * pow(t, 2), 4 * pow(t, 3), 5
-			* pow(t, 4), 6 * t, 12 * pow(t, 2), 20 * pow(t, 3);
-
-	auto c0 = a0 + a1 * t + a2 * pow(t, 2);
-	auto c1 = a1 + 2 * a2 * t;
-	auto c2 = 2 * a2;
-
-	Vector3d b;
-	b << goal[0] - c0, goal[1] - c1, goal[2] - c2;
-
-	Vector3d x = A.colPivHouseholderQr().solve(b);
-	Vector6d result;
-	result << a0, a1, a2, x;
-	return result;
-}
-
-
 /**
  * Evaluates the quintic function with the given coefficients in `x`.
  * @param coeffs the quintic function coefficients, ordered from the term of degree 0 to the term of degree 5.
@@ -90,12 +52,10 @@ double evalQuintic(Vector6d coeffs, double x) {
 	return result;
 }
 
-
 // Keep lane, prepare to change lane left, prepare to change lane right, change lane left, change lane right
 enum struct CarState {
 	KL, PLCL, PLCR, CLL, CLR
 };
-
 
 pair<double, double> universal2car_ref(const pair<double, double> xy,
 		const double car_x, const double car_y, const double car_yaw) {
@@ -128,22 +88,6 @@ bool close_enough(const double a, const double b) {
 		return true;
 	return false;
 }
-
-
-pair<double, double> findClosestInLane(Coordinates sd,  vector<carSensorData> cars, unsigned lane, bool preceding ) {
-	int closest_i= -1;  // Will be the position in cars[] of the found vehicle (if found)
-	double closest_dist=  numeric_limits<double>::max();
-	int sign= (preceding)? 1: -1;
-	for (unsigned i=0; i<cars.size(); ++i)  {
-		double separation = -sign*cars[i].measureSeparationFrom(sd.first);
-		if (separation >=0 && separation < closest_dist && abs(cars[i].d-lane_width/2-lane_width*lane) < lane_width/2) {
-			closest_dist= separation;
-			closest_i=i;
-		}
-	}
-	return {closest_i, closest_dist };
-}
-
 
 int main() {
 	uWS::Hub h;
@@ -316,7 +260,7 @@ int main() {
 						switch(car_state) {
 						case CarState::KL:
 							// Find the closest vehicle in range preceding in the same lane (if any)
-							auto closest_info= findClosestInLane({car_s, car_d}, cars, lane, true);
+							auto closest_info= findClosestInLane({car_s, car_d}, cars, lane, true, lane_width);
 							int closest_i= closest_info.first;  // Will be the position in cars[] of the found vehicle (if found)
 							double closest_dist=  closest_info.second;
 
@@ -345,12 +289,12 @@ int main() {
 
 								for (auto the_lane: lanes) {
 									// Find closest preceding vehicle (if any) in adjacent lane
-									auto preceding = findClosestInLane({car_s, car_d }, cars, the_lane, true);
+									auto preceding = findClosestInLane({car_s, car_d }, cars, the_lane, true, lane_width);
 									int preceding_i= preceding.first;
 									double preceding_dist= preceding.second;
 									if (preceding_i >=0)
 										cout << "Found preceding car in lane " << the_lane << " with distance " << preceding_dist << endl;
-									auto following = findClosestInLane({car_s, car_d }, cars, the_lane, false);
+									auto following = findClosestInLane({car_s, car_d }, cars, the_lane, false, lane_width);
 									int following_i= following.first;
 									double following_dist= following.second;
 									if (following_i >=0)

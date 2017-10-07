@@ -3,7 +3,7 @@
 #include <vector>
 #include "coordinatesHandling.h"
 
-struct carSensorData {
+struct carSensorData {  // TODO change to upper-case initial
 	unsigned id;
 	double x;
 	double y;
