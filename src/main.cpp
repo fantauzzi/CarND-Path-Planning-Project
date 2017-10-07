@@ -21,6 +21,9 @@ using namespace Eigen;
 // for convenience
 using json = nlohmann::json;
 
+// Yes, the lane width
+constexpr double lane_width = 4;
+
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
 // else the empty string "" will be returned.
@@ -36,10 +39,12 @@ string hasData(string s) {
 	return "";
 }
 
+
 /* Convenient alias for a type, will hold the 6 coefficients of a quintic function, sorted
  * from the degree 0 coefficient to the degree 5: a0+a1*x+a2*x^2+a3*x^3+a4*x^4+a5*x^5 .
  */
 typedef Matrix<double, 6, 1> Vector6d;
+
 
 /**
  * Computes the jerk minimising trajectory for the given boundary conditions and time interval.
@@ -71,6 +76,7 @@ Vector6d computeJMT(const Vector3d start, const Vector3d goal, double t) {
 	return result;
 }
 
+
 /**
  * Evaluates the quintic function with the given coefficients in `x`.
  * @param coeffs the quintic function coefficients, ordered from the term of degree 0 to the term of degree 5.
@@ -84,10 +90,12 @@ double evalQuintic(Vector6d coeffs, double x) {
 	return result;
 }
 
+
 // Keep lane, prepare to change lane left, prepare to change lane right, change lane left, change lane right
 enum struct CarState {
 	KL, PLCL, PLCR, CLL, CLR
 };
+
 
 pair<double, double> universal2car_ref(const pair<double, double> xy,
 		const double car_x, const double car_y, const double car_yaw) {
@@ -101,6 +109,7 @@ pair<double, double> universal2car_ref(const pair<double, double> xy,
 	return {x_res, y_res};
 }
 
+
 pair<double, double> car2universal_ref(const pair<double, double> xy,
 		const double car_x, const double car_y, const double car_yaw) {
 	double unrot_x = xy.first * cos(car_yaw) - xy.second * sin(car_yaw);
@@ -112,12 +121,29 @@ pair<double, double> car2universal_ref(const pair<double, double> xy,
 	return {x_res, y_res};
 }
 
+
 bool close_enough(const double a, const double b) {
 	constexpr double tollerance = 0.001;
 	if (abs(a - b) <= tollerance)
 		return true;
 	return false;
 }
+
+
+pair<double, double> findClosestInLane(Coordinates sd,  vector<carSensorData> cars, unsigned lane, bool preceding ) {
+	int closest_i= -1;  // Will be the position in cars[] of the found vehicle (if found)
+	double closest_dist=  numeric_limits<double>::max();
+	int sign= (preceding)? 1: -1;
+	for (unsigned i=0; i<cars.size(); ++i)  {
+		double separation = -sign*cars[i].measureSeparationFrom(sd.first);
+		if (separation >=0 && separation < closest_dist && abs(cars[i].d-lane_width/2-lane_width*lane) < lane_width/2) {
+			closest_dist= separation;
+			closest_i=i;
+		}
+	}
+	return {closest_i, closest_dist };
+}
+
 
 int main() {
 	uWS::Hub h;
@@ -188,10 +214,6 @@ int main() {
 
 	// When the planned trajectory yet to be run goes under this duration, extend it by planning a new trajectory
 	constexpr double min_trajectory_duration = 0.5;
-
-	// Yes, the lane width
-	constexpr double lane_width = 4;
-
 
 	FrenetCartesianConverter coord_conv(map_waypoints_s, map_waypoints_x,
 			map_waypoints_y, map_waypoints_dx, map_waypoints_dy, max_s);
@@ -294,94 +316,130 @@ int main() {
 						switch(car_state) {
 						case CarState::KL:
 							// Find the closest vehicle in range preceding in the same lane (if any)
-							int closest_i= -1;  // Will be the position in cars[] of the found vehicle (if found)
-							double closest_dist=  numeric_limits<double>::max();
-							for (unsigned i=0; i<cars.size(); ++i)  {
-								double separation = -cars[i].measureSeparationFrom(car_s);
-								if (separation >=0 && separation < closest_dist && abs(cars[i].d - car_d) < lane_width/2) {
-									closest_dist= separation;
-									closest_i=i;
-								}
-							}
+							auto closest_info= findClosestInLane({car_s, car_d}, cars, lane, true);
+							int closest_i= closest_info.first;  // Will be the position in cars[] of the found vehicle (if found)
+							double closest_dist=  closest_info.second;
 
 							/* If the distance is below a certain amount, set the target speed to the speed
 							 * of the preceding car, less some margin; otherwise set the target speed to the max cruise speed
 							 */
+							bool consider_lane_change= false;
 							if (closest_i >= 0 && closest_dist <= 50) {
 								target_speed= min(sqrt(pow(cars[closest_i].vx,2)+pow(cars[closest_i].vy,2))*.99, cruise_speed);
+								consider_lane_change= true;  // TODO not quite right, what if the preceding car is faster than cruise_speed?
 								// cout << "Separation=" << closest_dist << " car#" <<closest_i << " target_speed=" << target_speed << endl;
 							}
 							else
 								target_speed= cruise_speed;
-							if (remaining_path_duration < min_trajectory_duration) {
-								cout << "Iteration# " << iterations << endl;
-								cout << "s=" << car_s << " d=" << car_d << " yaw=" << rad2deg(car_yaw) << endl;
-								cout << "speed=" << car_speed << endl;
 
-								// Determine boundary conditions for quintic polynomial (car trajectory in Frenet coordinates)
+							if (consider_lane_change) {
+								cout << "Considering lane change." << endl;
+								// Which lanes should we consider for a lane change?
+								vector<unsigned> lanes;
+								if (lane==1)
+									lanes= {0u, 2u};
+								else
+									lanes= {1u};
+								int new_lane= -1;  // Will be set to the best lane to change to, or left set to -1 if no suitable lane change is found
+								double new_lane_speed= 0;
 
-								Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
-								Vector3d s_goal;// Goal conditions for s
-								int a_sign = (target_speed > s_start[1])? 1 : -1;
-								double proj_vel_s = s_start[1] + a_sign*max_accel_s*planning_t;
-								if ((a_sign > 0 && proj_vel_s < target_speed) || (a_sign < 0 && proj_vel_s > target_speed))
-									s_goal << s_start[0]+s_start[1]*planning_t+.5*(a_sign)*max_accel_s*pow(planning_t,2), proj_vel_s, a_sign*max_accel_s;
-								else {
-									double tx= a_sign*(target_speed - s_start[1]) / max_accel_s;
-									double s1= s_start[0] + s_start[1]*tx+.5*a_sign*max_accel_s*pow(tx,2);
-									double s2= (planning_t - tx) * target_speed;
-									s_goal << s1+s2, target_speed, 0;
+								for (auto the_lane: lanes) {
+									// Find closest preceding vehicle (if any) in adjacent lane
+									auto preceding = findClosestInLane({car_s, car_d }, cars, the_lane, true);
+									int preceding_i= preceding.first;
+									double preceding_dist= preceding.second;
+									if (preceding_i >=0)
+										cout << "Found preceding car in lane " << the_lane << " with distance " << preceding_dist << endl;
+									auto following = findClosestInLane({car_s, car_d }, cars, the_lane, false);
+									int following_i= following.first;
+									double following_dist= following.second;
+									if (following_i >=0)
+										cout << "Found following car in lane " << the_lane << " with distance " << following_dist << endl;
+									// Is this lane change viable?
+									bool viable= true;
+									if (following_i >=0 && following_dist < 10)
+										viable= false;
+									else if (preceding_i >=0 && preceding_dist <15)
+										viable= false;
+									if (viable && (preceding_i<0 || (preceding_i>=0 && cars[preceding_i].getSpeed() > new_lane_speed))) {
+										new_lane= the_lane;
+										new_lane_speed= (preceding_i >= 0)? cars[preceding_i].getSpeed() : cruise_speed;
+									}
+
 								}
-								cout << "s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
-
-								Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
-								Vector3d d_goal;// Goal conditions for d
-								d_goal << 2+lane*4, 0, 0;
-								cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
-
-								// Update the boundary conditions to be used at the beginning of the next JMT
-								last_s_boundary_conditions = s_goal;
-								if (last_s_boundary_conditions[0] >= max_s)
-									last_s_boundary_conditions[0]-=max_s;
-								last_d_boundary_conditions = d_goal;
-
-								// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
-								auto sJMT = computeJMT(s_start, s_goal, planning_t);
-								cout << "sJMT= " << sJMT.transpose() << endl << endl;
-								auto dJMT = computeJMT(d_start, d_goal, planning_t);
-								cout << "dJMT= " << dJMT.transpose() << endl << endl;
-
-								/* Sample waypoints from the trajectory at time intervals of duration tick,
-								 * and store them in Cartesian (universal) coordinates. We want one waypoint at the end of every tick,
-								 * from time 0 to time planning_t
-								 */
-								vector<pair<double, double>> wpoints; // Will hold the sampled waypoints
-								vector<double> ss;
-								unsigned n_planning_wpoints=static_cast<int>(round(planning_t / tick));
-								double previous_s =-1;
-								for (unsigned i_wpoint=0; i_wpoint<n_planning_wpoints; ++i_wpoint) {
-									double wpoint_t= tick*(i_wpoint+1);
-									double next_s= evalQuintic(sJMT, wpoint_t);
-									ss.push_back(next_s);
-									if (next_s < previous_s && !close_enough(next_s, previous_s))
-									cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
-									if (next_s < car_s && ! close_enough(next_s, car_s))
-									cout << "ERROR: going backward  next_s= " << next_s << "  car_s= " << car_s << endl;
-									double next_d= evalQuintic(dJMT, wpoint_t);
-									auto xy= coord_conv.getXY(next_s, next_d);
-									wpoints.push_back(xy);
-								}
-								assert(wpoints.size()==n_planning_wpoints);
-
-								// Next add waypoints from the just computed JMT
-
-								for (auto wpoint: wpoints) {
-									next_x_vals.push_back(wpoint.first);
-									next_y_vals.push_back(wpoint.second);
-								}
-							} // if (remaining_path_duration < min_trajectory_duration)
-
+								//if (new_lane>=0)
+								//	cout << "Decided for lane " << new_lane << " with speed " << new_lane_speed << endl;
+							}
 						}
+
+						if (remaining_path_duration < min_trajectory_duration) {
+							cout << "Iteration# " << iterations << endl;
+							cout << "s=" << car_s << " d=" << car_d << " yaw=" << rad2deg(car_yaw) << endl;
+							cout << "speed=" << car_speed << endl;
+
+							// Determine boundary conditions for quintic polynomial (car trajectory in Frenet coordinates)
+
+							Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
+							Vector3d s_goal;// Goal conditions for s
+							int a_sign = (target_speed > s_start[1])? 1 : -1;
+							double proj_vel_s = s_start[1] + a_sign*max_accel_s*planning_t;
+							if ((a_sign > 0 && proj_vel_s < target_speed) || (a_sign < 0 && proj_vel_s > target_speed))
+								s_goal << s_start[0]+s_start[1]*planning_t+.5*(a_sign)*max_accel_s*pow(planning_t,2), proj_vel_s, a_sign*max_accel_s;
+							else {
+								double tx= a_sign*(target_speed - s_start[1]) / max_accel_s;
+								double s1= s_start[0] + s_start[1]*tx+.5*a_sign*max_accel_s*pow(tx,2);
+								double s2= (planning_t - tx) * target_speed;
+								s_goal << s1+s2, target_speed, 0;
+							}
+							cout << "s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
+
+							Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
+							Vector3d d_goal;// Goal conditions for d
+							d_goal << 2+lane*4, 0, 0;
+							cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
+
+							// Update the boundary conditions to be used at the beginning of the next JMT
+							last_s_boundary_conditions = s_goal;
+							if (last_s_boundary_conditions[0] >= max_s)
+								last_s_boundary_conditions[0]-=max_s;
+							last_d_boundary_conditions = d_goal;
+
+							// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
+							auto sJMT = computeJMT(s_start, s_goal, planning_t);
+							cout << "sJMT= " << sJMT.transpose() << endl << endl;
+							auto dJMT = computeJMT(d_start, d_goal, planning_t);
+							cout << "dJMT= " << dJMT.transpose() << endl << endl;
+
+							/* Sample waypoints from the trajectory at time intervals of duration tick,
+							 * and store them in Cartesian (universal) coordinates. We want one waypoint at the end of every tick,
+							 * from time 0 to time planning_t
+							 */
+							vector<pair<double, double>> wpoints; // Will hold the sampled waypoints
+							vector<double> ss;
+							unsigned n_planning_wpoints=static_cast<int>(round(planning_t / tick));
+							double previous_s =-1;
+							for (unsigned i_wpoint=0; i_wpoint<n_planning_wpoints; ++i_wpoint) {
+								double wpoint_t= tick*(i_wpoint+1);
+								double next_s= evalQuintic(sJMT, wpoint_t);
+								ss.push_back(next_s);
+								if (next_s < previous_s && !close_enough(next_s, previous_s))
+								cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
+								if (next_s < car_s && ! close_enough(next_s, car_s))
+								cout << "ERROR: going backward  next_s= " << next_s << "  car_s= " << car_s << endl;
+								double next_d= evalQuintic(dJMT, wpoint_t);
+								auto xy= coord_conv.getXY(next_s, next_d);
+								wpoints.push_back(xy);
+							}
+							assert(wpoints.size()==n_planning_wpoints);
+
+							// Next add waypoints from the just computed JMT
+
+							for (auto wpoint: wpoints) {
+								next_x_vals.push_back(wpoint.first);
+								next_y_vals.push_back(wpoint.second);
+							}
+						} // if (remaining_path_duration < min_trajectory_duration)
+
 
 
 						/* If state is CLL/CLR:
