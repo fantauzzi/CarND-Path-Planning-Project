@@ -14,6 +14,22 @@ struct carSensorData {  // TODO change to upper-case initial
 	FrenetCartesianConverter converter;
 	carSensorData(std::vector<double> sensorInfo, const FrenetCartesianConverter & the_converter);
 
+
+struct ConfigParams {
+		// TODO this should be a singleton
+	};
+
+class Car { // TODO should Car be merged with carSensorData? Or should it be a singleton itself?
+	double s;
+	double d;
+	double x;
+	double y;
+	double yaw;
+	double velocity;
+	std::vector<double> path_x;
+	std::vector<double> path_y;
+	};
+
 	/**
 	 * Measure the Euclidean car distance from the given point in a Cartesian refence system.
 	 * @param from_x the x coordinate of the point to take the distance from.

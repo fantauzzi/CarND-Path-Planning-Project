@@ -18,13 +18,16 @@ protected:
 	double planning_t;
 	double max_s;
 public:
+	FSM_State(double car_s, double car_d, unsigned lane, double cruise_speed, double lane_width, double max_accel_s, double planning_t, double max_s);
 	virtual FSM_State * getNextState()=0;
 	virtual void computeBoundaryConditions()=0;
 	virtual ~FSM_State();
 };
 
 class KeepLane: public FSM_State {
-	virtual FSM_State * getNextState() override;
+public:
+	KeepLane(double car_s, double car_d, unsigned lane, double cruise_speed, double lane_width, double max_accel_s, double planning_t, double max_s);
+	virtual FSM_State * getNextState() override;  // TODO could I narrow to return a KeepLane * ?
 	virtual void computeBoundaryConditions() override;
 	virtual ~KeepLane();
 };

@@ -14,15 +14,17 @@
 #include "car.h"
 #include "json.hpp"
 #include "FSM.h"
+#include "ConfigParams.h"
 
 using namespace std;
 using namespace Eigen;
+using namespace ConfigParams;
 
 // for convenience
 using json = nlohmann::json;
 
 // Yes, the lane width
-constexpr double lane_width = 4;
+// constexpr double lane_width = 4;
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -140,24 +142,20 @@ int main() {
 	/* All measures below are in the I.S. */
 	/**************************************/
 
-	// Next two used to estimate accelerations; commented out and not using the acceleration at present
-	// double prev_vel_s = 0;
-	// double prev_vel_d = 0;
-	// double delta_t = 0.05;
 	// Duration of the planned trajectory
-	constexpr double planning_t = 1;
+	// constexpr double planning_t = 1;
 
 	// Desired cruise speed, that the behaviour planning shall try to attain and keep
-	constexpr double cruise_speed = 21.4579;
+	// constexpr double cruise_speed = 21.4579;
 
 	// Maximum acceptable acceleration for the car, will try to reach it to get to target_sped in the shortest time
-	constexpr double max_accel_s = 7;
+	// constexpr double max_accel_s = 7;
 
 	// Time interval between two consecutive waypoints, as implemented by the simulator
-	constexpr double tick = 0.02;
+	// constexpr double tick = 0.02;
 
 	// When the planned trajectory yet to be run goes under this duration, extend it by planning a new trajectory
-	constexpr double min_trajectory_duration = 0.5;
+	// constexpr double min_trajectory_duration = 0.5;
 
 	FrenetCartesianConverter coord_conv(map_waypoints_s, map_waypoints_x,
 			map_waypoints_y, map_waypoints_dx, map_waypoints_dy, max_s);
@@ -165,12 +163,20 @@ int main() {
 	// ofstream log_file;
 	// log_file.open ("/home/fanta/workspace/CarND-Path-Planning-Project/data/log.txt");
 
-	//bool jumped = false;
-
-	constexpr double sensor_range= 300;
+	// constexpr double sensor_range= 300;
 
 	// The speed the car tries to attain and maintain, can change at every iteration based on behaviour planning
 	double target_speed = 21.4579;
+
+	unique_ptr<FSM_State> pState= make_unique<KeepLane>(
+			0,
+			0,
+			lane,
+			cruise_speed,
+			lane_width,
+			max_accel_s,
+			planning_t,
+			max_s);
 
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 			uWS::OpCode opCode) {
@@ -256,6 +262,8 @@ int main() {
 
 						// Time left before the car will gobble up the current path (in seconds)
 						const double remaining_path_duration = previous_path_x.size()*tick;
+
+						// =============================
 
 						switch(car_state) {
 						case CarState::KL:

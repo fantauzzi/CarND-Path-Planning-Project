@@ -45,11 +45,49 @@ Vector6d computeJMT(const Vector3d start, const Vector3d goal, double t) {
 	result << a0, a1, a2, x;
 	return result;
 }
+FSM_State::FSM_State(
+		double car_s_init,
+		double car_d_init,
+		unsigned lane_init,
+		double cruise_speed_init,
+		double lane_width_init,
+		double max_accel_s_init,
+		double planning_t_init,
+		double max_s_init):
+				car_s(car_s_init),
+				car_d(car_d_init),
+				lane(lane_init),
+				cruise_speed(cruise_speed_init),
+				lane_width(lane_width_init),
+				max_accel_s(max_accel_s_init),
+				planning_t(planning_t_init),
+				max_s(max_s_init){
+
+}
 
 FSM_State::~FSM_State() {
 	// do nothing
 }
 
+
+KeepLane::KeepLane(
+		double car_s,
+		double car_d,
+		unsigned lane,
+		double cruise_speed,
+		double lane_width,
+		double max_accel_s,
+		double planning_t,
+		double max_s): FSM_State(car_s,
+				car_d,
+				lane,
+				cruise_speed,
+				lane_width,
+				max_accel_s,
+				planning_t,
+				max_s) {
+
+}
 
 FSM_State * KeepLane::getNextState() {
 	// Find the closest vehicle in range preceding in the same lane (if any)
