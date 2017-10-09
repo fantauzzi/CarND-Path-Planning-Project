@@ -3,7 +3,7 @@
 #include <vector>
 #include "coordinatesHandling.h"
 
-struct carSensorData {  // TODO change to upper-case initial
+struct CarSensorData {
 	unsigned id;
 	double x;
 	double y;
@@ -12,23 +12,7 @@ struct carSensorData {  // TODO change to upper-case initial
 	double s;
 	double d;
 	FrenetCartesianConverter converter;
-	carSensorData(std::vector<double> sensorInfo, const FrenetCartesianConverter & the_converter);
-
-
-struct ConfigParams {
-		// TODO this should be a singleton
-	};
-
-class Car { // TODO should Car be merged with carSensorData? Or should it be a singleton itself?
-	double s;
-	double d;
-	double x;
-	double y;
-	double yaw;
-	double velocity;
-	std::vector<double> path_x;
-	std::vector<double> path_y;
-	};
+	CarSensorData(std::vector<double> sensorInfo, const FrenetCartesianConverter & the_converter);
 
 	/**
 	 * Measure the Euclidean car distance from the given point in a Cartesian refence system.
@@ -66,7 +50,6 @@ class Car { // TODO should Car be merged with carSensorData? Or should it be a s
 	 */
 	Coordinates predictFrenet(double dt) const;
 
-
 	/**
 	 * Compute and return the distance with sign between a point at the given s Frenet coordinate
 	 * and this car; the distance is positive if the point is in front of the car, negative otherwise.
@@ -74,4 +57,17 @@ class Car { // TODO should Car be merged with carSensorData? Or should it be a s
 	 * @return the computed distance with sign.
 	 */
 	double measureSeparationFrom(const double s) const;
+};
+
+
+struct Car {
+	double s;
+	double d;
+	double x;
+	double y;
+	double yaw;
+	double speed;
+	std::vector<double> path_x;
+	std::vector<double> path_y;
+	unsigned getLane() const;
 };

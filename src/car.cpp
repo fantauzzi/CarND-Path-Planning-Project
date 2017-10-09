@@ -1,11 +1,12 @@
-#include "car.h"
 #include <cmath>
 #include <utility>
 #include "coordinatesHandling.h"
+#include "Car.h"
+#include "ConfigParams.h"
 
 using namespace std;
 
-carSensorData::carSensorData(vector<double> sensorInfo, const FrenetCartesianConverter & the_converter):
+CarSensorData::CarSensorData(vector<double> sensorInfo, const FrenetCartesianConverter & the_converter):
 		id(static_cast<unsigned>(sensorInfo[0])),
 		x(sensorInfo[1]),
 		y(sensorInfo[2]),
@@ -19,17 +20,17 @@ carSensorData::carSensorData(vector<double> sensorInfo, const FrenetCartesianCon
 }
 
 
-double carSensorData::measureDistanceFrom(const double from_x, const double from_y) const {
+double CarSensorData::measureDistanceFrom(const double from_x, const double from_y) const {
 	return sqrt(pow(x-from_x, 2)+pow(y-from_y, 2));
 }
 
 
-double carSensorData::getSpeed() const {
+double CarSensorData::getSpeed() const {
 	return sqrt(vx*vx+vy*vy);
 }
 
 
-double carSensorData::getYaw() const {
+double CarSensorData::getYaw() const {
 	double yaw= atan2(vy, vx);
 	// Make sure the angle is between 0 and pi radians
 	if (yaw<0)
@@ -38,7 +39,7 @@ double carSensorData::getYaw() const {
 }
 
 
-Coordinates carSensorData::getFrenetVelocity() const {
+Coordinates CarSensorData::getFrenetVelocity() const {
 	double road_h = converter.getRoadHeading(s);
 	double car_vel_s= getSpeed() *cos(getYaw() - road_h);
 	double car_vel_d= -getSpeed()*sin(getYaw() - road_h); // d=0 on the yellow center line, and increases toward the outer of the track
@@ -46,7 +47,7 @@ Coordinates carSensorData::getFrenetVelocity() const {
 }
 
 
-Coordinates carSensorData::predictFrenet(double dt) const {
+Coordinates CarSensorData::predictFrenet(double dt) const {
 	const auto sd_vel = getFrenetVelocity();
 	const double s_pred = s+sd_vel.first * dt;
 	const double d_pred = d+sd_vel.second * dt;
@@ -54,7 +55,7 @@ Coordinates carSensorData::predictFrenet(double dt) const {
 }
 
 
-double carSensorData::measureSeparationFrom(const double other_s) const {
+double CarSensorData::measureSeparationFrom(const double other_s) const {
 	double sep= other_s -s;
 
 	// Handle the case where this car are the other car are on opposite side of the line s=0
@@ -62,4 +63,9 @@ double carSensorData::measureSeparationFrom(const double other_s) const {
 		sep = converter.max_s-sep;
 
 	return sep;
+}
+
+unsigned Car::getLane() const {
+	auto lane = floor(d/ConfigParams::lane_width);
+	return static_cast<unsigned>(lane);
 }

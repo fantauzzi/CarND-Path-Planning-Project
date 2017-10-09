@@ -9,12 +9,12 @@
 #include <cassert>
 #include <limits>
 #include "Eigen/Core"
-#include "Eigen/QR"
 #include "coordinatesHandling.h"
-#include "car.h"
+#include "Car.h"
 #include "json.hpp"
 #include "FSM.h"
 #include "ConfigParams.h"
+#include "trajectory.h"
 
 using namespace std;
 using namespace Eigen;
@@ -41,48 +41,10 @@ string hasData(string s) {
 	return "";
 }
 
-/**
- * Evaluates the quintic function with the given coefficients in `x`.
- * @param coeffs the quintic function coefficients, ordered from the term of degree 0 to the term of degree 5.
- * @param x the value for which to evaluate the quintic function.
- * @return the computed value.
- */
-double evalQuintic(Vector6d coeffs, double x) {
-	double result = coeffs[0] + coeffs[1] * x + coeffs[2] * pow(x, 2)
-			+ coeffs[3] * pow(x, 3) + coeffs[4] * pow(x, 4)
-			+ coeffs[5] * pow(x, 5);
-	return result;
-}
-
 // Keep lane, prepare to change lane left, prepare to change lane right, change lane left, change lane right
 enum struct CarState {
 	KL, PLCL, PLCR, CLL, CLR
 };
-
-pair<double, double> universal2car_ref(const pair<double, double> xy,
-		const double car_x, const double car_y, const double car_yaw) {
-
-	double shift_x = xy.first - car_x;
-	double shift_y = xy.second - car_y;
-
-	double x_res = (shift_x * cos(-car_yaw) - shift_y * sin(-car_yaw));
-	double y_res = (shift_x * sin(-car_yaw) + shift_y * cos(-car_yaw));
-
-	return {x_res, y_res};
-}
-
-
-pair<double, double> car2universal_ref(const pair<double, double> xy,
-		const double car_x, const double car_y, const double car_yaw) {
-	double unrot_x = xy.first * cos(car_yaw) - xy.second * sin(car_yaw);
-	double unrot_y = xy.first * sin(car_yaw) + xy.second * cos(car_yaw);
-
-	double x_res = unrot_x + car_x;
-	double y_res = unrot_y + car_y;
-
-	return {x_res, y_res};
-}
-
 
 bool close_enough(const double a, const double b) {
 	constexpr double tollerance = 0.001;
@@ -105,7 +67,6 @@ int main() {
 	string map_file_ =
 			"/home/fanta/workspace/CarND-Path-Planning-Project/data/highway_map.csv";
 	// The max s value before wrapping around the track back to 0
-	constexpr double max_s = 6945.554;
 
 	ifstream in_map_(map_file_.c_str(), ifstream::in);
 
@@ -138,45 +99,19 @@ int main() {
 	Vector3d last_d_boundary_conditions;
 	bool last_boundary_conditions_init = false;
 
-	/**************************************/
-	/* All measures below are in the I.S. */
-	/**************************************/
-
-	// Duration of the planned trajectory
-	// constexpr double planning_t = 1;
-
-	// Desired cruise speed, that the behaviour planning shall try to attain and keep
-	// constexpr double cruise_speed = 21.4579;
-
-	// Maximum acceptable acceleration for the car, will try to reach it to get to target_sped in the shortest time
-	// constexpr double max_accel_s = 7;
-
-	// Time interval between two consecutive waypoints, as implemented by the simulator
-	// constexpr double tick = 0.02;
-
-	// When the planned trajectory yet to be run goes under this duration, extend it by planning a new trajectory
-	// constexpr double min_trajectory_duration = 0.5;
-
 	FrenetCartesianConverter coord_conv(map_waypoints_s, map_waypoints_x,
 			map_waypoints_y, map_waypoints_dx, map_waypoints_dy, max_s);
 
 	// ofstream log_file;
 	// log_file.open ("/home/fanta/workspace/CarND-Path-Planning-Project/data/log.txt");
 
-	// constexpr double sensor_range= 300;
-
 	// The speed the car tries to attain and maintain, can change at every iteration based on behaviour planning
 	double target_speed = 21.4579;
 
-	unique_ptr<FSM_State> pState= make_unique<KeepLane>(
-			0,
-			0,
-			lane,
-			cruise_speed,
-			lane_width,
-			max_accel_s,
-			planning_t,
-			max_s);
+	Car car;
+	vector<CarSensorData> cars;  // TODO does it really need to be part of the FSM state?
+
+	unique_ptr<FSM_State> pState= make_unique<KeepLane>(car, cars);
 
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 			uWS::OpCode opCode) {
@@ -212,28 +147,30 @@ int main() {
 						prev_t = current_t;
 
 						// Main car's localization Data
-						double car_x = j[1]["x"];  // m
-						double car_y = j[1]["y"];  // m
-						double car_s = j[1]["s"];// m
-						double car_d = j[1]["d"];// m
+						car.x = j[1]["x"];  // m
+						car.y = j[1]["y"];  // m
+						car.s = j[1]["s"];// m
+						car.d = j[1]["d"];// m
 						double car_yaw_deg = j[1]["yaw"];// Degrees
-						auto car_yaw = deg2rad(car_yaw_deg);// Converted to radians
+						car.yaw = deg2rad(car_yaw_deg);// Converted to radians
 						double car_speed_mph = j[1]["speed"];// mps
-						auto car_speed= 1609.344*car_speed_mph/3600;// Converted to m/s
+						car.speed= 1609.344*car_speed_mph/3600;// Converted to m/s
 
 						// Previous path data given to the Planner; item [0] is the closest to the car
-						vector<double> previous_path_x = j[1]["previous_path_x"];
-						vector<double> previous_path_y = j[1]["previous_path_y"];
-						// Previous path's end s and d values (corresponding to the last element in previous_path_x[] and previous_path_y[]
+						vector<double> car_path_x = std::move(j[1]["previous_path_x"]);
+						car.path_x= std::move(car_path_x);
+						vector<double> car_path_y = std::move(j[1]["previous_path_y"]);
+						car.path_y= std::move(car_path_y);
+						// Previous path's end s and d values (corresponding to the last element in car.path_x[] and car.path_y[]
 						// double end_path_s = j[1]["end_path_s"];
 						// double end_path_d = j[1]["end_path_d"];
 
 						// Sensor Fusion Data, a list of all other cars on the same side of the road.
 						vector<vector<double>> sensor_fusion = j[1]["sensor_fusion"];
-						vector<carSensorData> cars;
+						cars.clear();
 						for (auto item: sensor_fusion)
-							if (abs(item[5]-car_s) <= sensor_range)
-								cars.push_back(carSensorData(item, coord_conv));
+							if (abs(item[5]-car.s) <= sensor_range)
+								cars.push_back(CarSensorData(item, coord_conv));
 
 						/* If state is KL:
 						 * - find closest vehicle preceding in same lane
@@ -248,27 +185,27 @@ int main() {
 
 						// Initialise last_boundary_conditions at the first iteration (beginning of the simulation)
 						if (!last_boundary_conditions_init) {
-							assert(car_speed==.0);
-							last_s_boundary_conditions[0] = car_s;
-							last_d_boundary_conditions[0] = car_d;
+							assert(car.speed==.0);
+							last_s_boundary_conditions[0] = car.s;
+							last_d_boundary_conditions[0] = car.d;
 							last_boundary_conditions_init = true;
 						}
 
 						/* Fill in the path (waypoints) to be fed to the simulator. Start by copying all waypoints
 						 * still unused at the current iteration.
 						 */
-						vector<double> next_x_vals(previous_path_x);
-						vector<double> next_y_vals(previous_path_y);
+						vector<double> next_x_vals(car.path_x);
+						vector<double> next_y_vals(car.path_y);
 
 						// Time left before the car will gobble up the current path (in seconds)
-						const double remaining_path_duration = previous_path_x.size()*tick;
+						const double remaining_path_duration = car.path_x.size()*tick;
 
 						// =============================
 
 						switch(car_state) {
 						case CarState::KL:
 							// Find the closest vehicle in range preceding in the same lane (if any)
-							auto closest_info= findClosestInLane({car_s, car_d}, cars, lane, true, lane_width);
+							auto closest_info= findClosestInLane({car.s, car.d}, cars, lane, true, lane_width);
 							int closest_i= closest_info.first;  // Will be the position in cars[] of the found vehicle (if found)
 							double closest_dist=  closest_info.second;
 
@@ -297,12 +234,12 @@ int main() {
 
 								for (auto the_lane: lanes) {
 									// Find closest preceding vehicle (if any) in adjacent lane
-									auto preceding = findClosestInLane({car_s, car_d }, cars, the_lane, true, lane_width);
+									auto preceding = findClosestInLane({car.s, car.d }, cars, the_lane, true, lane_width);
 									int preceding_i= preceding.first;
 									double preceding_dist= preceding.second;
 									if (preceding_i >=0)
 										cout << "Found preceding car in lane " << the_lane << " with distance " << preceding_dist << endl;
-									auto following = findClosestInLane({car_s, car_d }, cars, the_lane, false, lane_width);
+									auto following = findClosestInLane({car.s, car.d }, cars, the_lane, false, lane_width);
 									int following_i= following.first;
 									double following_dist= following.second;
 									if (following_i >=0)
@@ -326,8 +263,8 @@ int main() {
 
 						if (remaining_path_duration < min_trajectory_duration) {
 							cout << "Iteration# " << iterations << endl;
-							cout << "s=" << car_s << " d=" << car_d << " yaw=" << rad2deg(car_yaw) << endl;
-							cout << "speed=" << car_speed << endl;
+							cout << "s=" << car.s << " d=" << car.d << " yaw=" << rad2deg(car.yaw) << endl;
+							cout << "speed=" << car.speed << endl;
 
 							// Determine boundary conditions for quintic polynomial (car trajectory in Frenet coordinates)
 
@@ -376,8 +313,8 @@ int main() {
 								ss.push_back(next_s);
 								if (next_s < previous_s && !close_enough(next_s, previous_s))
 								cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
-								if (next_s < car_s && ! close_enough(next_s, car_s))
-								cout << "ERROR: going backward  next_s= " << next_s << "  car_s= " << car_s << endl;
+								if (next_s < car.s && ! close_enough(next_s, car.s))
+								cout << "ERROR: going backward  next_s= " << next_s << "  car.s= " << car.s << endl;
 								double next_d= evalQuintic(dJMT, wpoint_t);
 								auto xy= coord_conv.getXY(next_s, next_d);
 								wpoints.push_back(xy);
@@ -392,23 +329,10 @@ int main() {
 							}
 						} // if (remaining_path_duration < min_trajectory_duration)
 
-
-
-						/* If state is CLL/CLR:
-						 * - when necessary, compute new trajectory to change lane
-						 */
-
-						/* Find the closest car preceding in the same lane, if any within sensors range
-						 */
-
 						// Determine road heading, and use it to compute the s and d components of the car velocity
-						/*double road_h = coord_conv.getRoadHeading(car_s);
-						double car_vel_s= car_speed*cos(car_yaw- road_h);
-						double car_vel_d= -car_speed*sin(car_yaw-road_h);// d=0 on the yellow center line, and increases toward the outer of the track*/
-
-						/* If the trajectory covers less than min_trajectory_duration seconds, then extend it by
-						 * computing a new JMT and stitching it to the end.
-						 */
+						/*double road_h = coord_conv.getRoadHeading(car.s);
+						double car_vel_s= car.speed*cos(car.yaw- road_h);
+						double car_vel_d= -car.speed*sin(car.yaw-road_h);// d=0 on the yellow center line, and increases toward the outer of the track*/
 
 						json msgJson;
 

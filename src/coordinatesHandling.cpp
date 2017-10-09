@@ -239,3 +239,25 @@ double FrenetCartesianConverter::getRoadHeading(const double s) const {
 		theta = 2*pi()+theta;
 	return theta;
 }
+
+Coordinates universal2car_ref(Coordinates xy, const double car_x, const double car_y, const double car_yaw) {
+
+	double shift_x = xy.first - car_x;
+	double shift_y = xy.second - car_y;
+
+	double x_res = (shift_x * cos(-car_yaw) - shift_y * sin(-car_yaw));
+	double y_res = (shift_x * sin(-car_yaw) + shift_y * cos(-car_yaw));
+
+	return {x_res, y_res};
+}
+
+
+Coordinates car2universal_ref(Coordinates xy, const double car_x, const double car_y, const double car_yaw) {
+	double unrot_x = xy.first * cos(car_yaw) - xy.second * sin(car_yaw);
+	double unrot_y = xy.first * sin(car_yaw) + xy.second * cos(car_yaw);
+
+	double x_res = unrot_x + car_x;
+	double y_res = unrot_y + car_y;
+
+	return {x_res, y_res};
+}

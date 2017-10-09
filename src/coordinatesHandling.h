@@ -49,3 +49,10 @@ public:
 
 	double getRoadHeading(const double s) const;
 };
+
+
+Coordinates universal2car_ref(const Coordinates,
+		const double car_x, const double car_y, const double car_yaw);
+
+Coordinates car2universal_ref(const Coordinates,
+		const double car_x, const double car_y, const double car_yaw);
