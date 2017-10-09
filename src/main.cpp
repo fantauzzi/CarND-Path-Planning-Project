@@ -90,8 +90,8 @@ int main() {
 		map_waypoints_dy.push_back(d_y);
 	}
 
-	unsigned lane = 1;  // Center lane
-	auto car_state = CarState::KL;
+	// unsigned lane = 1;  // Center lane TODO remove
+	auto car_state = CarState::KL; // TODO remove
 
 	auto prev_t = std::chrono::high_resolution_clock::now();
 	long iterations = 1;
@@ -100,17 +100,17 @@ int main() {
 	bool last_boundary_conditions_init = false;
 
 	FrenetCartesianConverter coord_conv(map_waypoints_s, map_waypoints_x,
-			map_waypoints_y, map_waypoints_dx, map_waypoints_dy, max_s);
+			map_waypoints_y, map_waypoints_dx, map_waypoints_dy);
 
 	// ofstream log_file;
 	// log_file.open ("/home/fanta/workspace/CarND-Path-Planning-Project/data/log.txt");
 
 	// The speed the car tries to attain and maintain, can change at every iteration based on behaviour planning
-	double target_speed = 21.4579;
+	// double target_speed = 21.4579; TODO remove this!
+
 
 	Car car;
 	vector<CarSensorData> cars;  // TODO does it really need to be part of the FSM state?
-
 	unique_ptr<FSM_State> pState= make_unique<KeepLane>(car, cars);
 
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
@@ -186,8 +186,9 @@ int main() {
 						// Initialise last_boundary_conditions at the first iteration (beginning of the simulation)
 						if (!last_boundary_conditions_init) {
 							assert(car.speed==.0);
-							last_s_boundary_conditions[0] = car.s;
-							last_d_boundary_conditions[0] = car.d;
+							pState->initBoundaryConditions({car.s,  0, 0}, {car.d, 0, 0});
+							// last_s_boundary_conditions[0] = car.s;
+							// last_d_boundary_conditions[0] = car.d;
 							last_boundary_conditions_init = true;
 						}
 
@@ -204,6 +205,7 @@ int main() {
 
 						switch(car_state) {
 						case CarState::KL:
+#ifdef SKIP_THIS
 							// Find the closest vehicle in range preceding in the same lane (if any)
 							auto closest_info= findClosestInLane({car.s, car.d}, cars, lane, true, lane_width);
 							int closest_i= closest_info.first;  // Will be the position in cars[] of the found vehicle (if found)
@@ -259,8 +261,11 @@ int main() {
 								//if (new_lane>=0)
 								//	cout << "Decided for lane " << new_lane << " with speed " << new_lane_speed << endl;
 							}
-						}
+#endif
 
+						auto pTmp= pState->getNextState(car, cars);
+						if (pState.get() != pTmp)  // Need to make this check because unique_ptr::reset() doesn't do it
+							pState.reset(pTmp);
 						if (remaining_path_duration < min_trajectory_duration) {
 							cout << "Iteration# " << iterations << endl;
 							cout << "s=" << car.s << " d=" << car.d << " yaw=" << rad2deg(car.yaw) << endl;
@@ -268,6 +273,11 @@ int main() {
 
 							// Determine boundary conditions for quintic polynomial (car trajectory in Frenet coordinates)
 
+							auto polynomials= pState->computeBoundaryConditions();
+							auto sJMT= polynomials.first;
+							auto dJMT= polynomials.second;
+
+#ifdef SKIP_THIS
 							Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 							Vector3d s_goal;// Goal conditions for s
 							int a_sign = (target_speed > s_start[1])? 1 : -1;
@@ -298,7 +308,7 @@ int main() {
 							cout << "sJMT= " << sJMT.transpose() << endl << endl;
 							auto dJMT = computeJMT(d_start, d_goal, planning_t);
 							cout << "dJMT= " << dJMT.transpose() << endl << endl;
-
+#endif
 							/* Sample waypoints from the trajectory at time intervals of duration tick,
 							 * and store them in Cartesian (universal) coordinates. We want one waypoint at the end of every tick,
 							 * from time 0 to time planning_t
@@ -328,6 +338,7 @@ int main() {
 								next_y_vals.push_back(wpoint.second);
 							}
 						} // if (remaining_path_duration < min_trajectory_duration)
+						}
 
 						// Determine road heading, and use it to compute the s and d components of the car velocity
 						/*double road_h = coord_conv.getRoadHeading(car.s);

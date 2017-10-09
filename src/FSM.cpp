@@ -28,12 +28,18 @@ pair<double, double> findClosestInLane(Coordinates sd,  vector<CarSensorData> ca
 
 
 FSM_State::FSM_State(const Car car_init, const std::vector<CarSensorData> cars_init):
-	car(car_init), cars(cars_init) {
+	car(car_init), cars(cars_init), boundary_conditions_initialised(false) {
 }
 
-FSM_State::~FSM_State() {
-	// do nothing
+void FSM_State::initBoundaryConditions(Eigen::Vector3d s_init, Eigen::Vector3d d_init) {
+	last_s_boundary_conditions= s_init;
+	last_d_boundary_conditions= d_init;
+	boundary_conditions_initialised= true;
 }
+
+/*FSM_State::~FSM_State() {
+	// do nothing
+}*/
 
 
 KeepLane::KeepLane(const Car & car_init, const std::vector<CarSensorData> cars_init):
@@ -41,7 +47,9 @@ KeepLane::KeepLane(const Car & car_init, const std::vector<CarSensorData> cars_i
 	target_speed= .0;
 }
 
-FSM_State * KeepLane::getNextState() {
+FSM_State * KeepLane::getNextState(const Car & theCar, const std::vector<CarSensorData> theCars) {
+	car= theCar;
+	cars= theCars;
 	// Find the closest vehicle in range preceding in the same lane (if any)
 	auto closest_info= findClosestInLane({car.s, car.d}, cars, car.getLane(), true, ConfigParams::lane_width);
 	int closest_i= closest_info.first;  // Will be the position in cars[] of the found vehicle (if found)
@@ -97,7 +105,8 @@ FSM_State * KeepLane::getNextState() {
 	return this;
 }
 
-void KeepLane::computeBoundaryConditions() {
+pair<Vector6d, Vector6d> KeepLane::computeBoundaryConditions() {
+	assert(boundary_conditions_initialised);
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
 	int a_sign = (target_speed > s_start[1])? 1 : -1;
@@ -128,9 +137,10 @@ void KeepLane::computeBoundaryConditions() {
 	cout << "sJMT= " << sJMT.transpose() << endl << endl;
 	auto dJMT = computeJMT(d_start, d_goal, ConfigParams::planning_t);
 	cout << "dJMT= " << dJMT.transpose() << endl << endl;
+	return {sJMT, dJMT};
 }
 
-KeepLane::~KeepLane() {
+/*KeepLane::~KeepLane() {
 	// do nothing
-}
+}*/
 

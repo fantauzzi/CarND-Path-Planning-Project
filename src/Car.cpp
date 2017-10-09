@@ -59,8 +59,8 @@ double CarSensorData::measureSeparationFrom(const double other_s) const {
 	double sep= other_s -s;
 
 	// Handle the case where this car are the other car are on opposite side of the line s=0
-	if (sep < -converter.max_s/2 || sep > converter.max_s/2)
-		sep = converter.max_s-sep;
+	if (sep < -ConfigParams::max_s/2 || sep > ConfigParams::max_s/2)
+		sep = ConfigParams::max_s-sep;
 
 	return sep;
 }

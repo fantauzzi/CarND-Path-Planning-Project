@@ -3,6 +3,7 @@
 #include <iostream>
 #include <algorithm>
 #include "spline.h"
+#include "ConfigParams.h"
 
 using namespace std;
 
@@ -105,14 +106,14 @@ void wrapForSpline(vector<double> & v, const unsigned n) {
 
 FrenetCartesianConverter::FrenetCartesianConverter(
 		const vector<double> maps_s_init, const vector<double> maps_x_init,
-		const vector<double> maps_y_init, const std::vector<double> maps_dx_init, const std::vector<double> maps_dy_init, const double max_s_init) :
-		maps_s(maps_s_init), maps_x(maps_x_init), maps_y(maps_y_init), maps_dx(maps_dx_init), maps_dy(maps_dy_init), max_s(max_s_init) {
+		const vector<double> maps_y_init, const std::vector<double> maps_dx_init, const std::vector<double> maps_dy_init) :
+		maps_s(maps_s_init), maps_x(maps_x_init), maps_y(maps_y_init), maps_dx(maps_dx_init), maps_dy(maps_dy_init) {
 	constexpr unsigned n_to_wrap= 5;
 
 	wrapForSpline(maps_s, n_to_wrap);
 	for (unsigned i=0; i< n_to_wrap; ++i) {
-		maps_s[i]-=max_s;
-		maps_s[maps_s.size()-1-i]+= max_s;
+		maps_s[i]-=ConfigParams::max_s;
+		maps_s[maps_s.size()-1-i]+= ConfigParams::max_s;
 	}
 
 	wrapForSpline(maps_x, n_to_wrap);
@@ -158,12 +159,12 @@ pair<double, double> FrenetCartesianConverter::getXY2(const double s,
 pair<double, double> FrenetCartesianConverter::getXY(const double s,
 		const double d) const {
 
-	// Wrap s around the [0, max_s] interval
+	// Wrap s around the [0, ConfigParams::max_s] interval
 	double wrapped_s = s;
 	if (wrapped_s < 0)
-		wrapped_s+=max_s;
-	else if (wrapped_s >= max_s)
-		wrapped_s-=max_s;
+		wrapped_s+=ConfigParams::max_s;
+	else if (wrapped_s >= ConfigParams::max_s)
+		wrapped_s-=ConfigParams::max_s;
 
 	double x0= spline_maps_x(wrapped_s);
 	double y0= spline_maps_y(wrapped_s);

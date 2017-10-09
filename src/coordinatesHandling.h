@@ -36,11 +36,10 @@ class FrenetCartesianConverter {
 
 	std::pair<double, double> getXY2(const double s, const double d) const;
 public:
-	const double max_s; // TODO move back to private
 	FrenetCartesianConverter(const std::vector<double> maps_s,
 			const std::vector<double> maps_x, const std::vector<double> maps_y,
 			const std::vector<double> map_waypoints_dx,
-			const std::vector<double> map_waypoints_dy, const double max_s);
+			const std::vector<double> map_waypoints_dy);
 
 	std::pair<double, double> getXY(const double s, const double d) const;
 
