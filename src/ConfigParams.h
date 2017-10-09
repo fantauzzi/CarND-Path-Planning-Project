@@ -15,7 +15,7 @@ namespace ConfigParams {
 	constexpr double cruise_speed = 21.4579;
 
 			// Maximum acceptable acceleration for the car, the car will try to reach it in order to get to target_sped in the shortest time
-	constexpr double max_accel_s = 7.5;
+	constexpr double max_accel_s = 7.2;
 
 	// Time interval between two consecutive waypoints, as implemented by the simulator
 	constexpr double tick = 0.02;

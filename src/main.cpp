@@ -90,9 +90,6 @@ int main() {
 		map_waypoints_dy.push_back(d_y);
 	}
 
-	// unsigned lane = 1;  // Center lane TODO remove
-	auto car_state = CarState::KL; // TODO remove
-
 	auto prev_t = std::chrono::high_resolution_clock::now();
 	long iterations = 1;
 	Vector3d last_s_boundary_conditions;
@@ -105,12 +102,8 @@ int main() {
 	// ofstream log_file;
 	// log_file.open ("/home/fanta/workspace/CarND-Path-Planning-Project/data/log.txt");
 
-	// The speed the car tries to attain and maintain, can change at every iteration based on behaviour planning
-	// double target_speed = 21.4579; TODO remove this!
-
-
 	Car car;
-	vector<CarSensorData> cars;  // TODO does it really need to be part of the FSM state?
+	vector<CarSensorData> cars;
 	unique_ptr<FSM_State> pState= make_unique<KeepLane>(car, cars);
 
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
@@ -142,7 +135,7 @@ int main() {
 						auto current_t = std::chrono::high_resolution_clock::now();
 						std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(current_t - prev_t);
 						// double delta_t = time_span.count();
-						// double delta_t = 0.05;  // TODO decide if I want to keep this, or the actual measurement
+						// double delta_t = 0.05;
 						// cout << "Delta-t= " << delta_t << endl;
 						prev_t = current_t;
 
@@ -156,12 +149,17 @@ int main() {
 						double car_speed_mph = j[1]["speed"];// mps
 						car.speed= 1609.344*car_speed_mph/3600;// Converted to m/s
 
-						// Previous path data given to the Planner; item [0] is the closest to the car
+						/* Previous path data given to the Planner; item [0] is the closest to the car.
+						 * Taking a de-tour to update these data into the car object, to make the compiler happy.
+						 */
 						vector<double> car_path_x = std::move(j[1]["previous_path_x"]);
 						car.path_x= std::move(car_path_x);
 						vector<double> car_path_y = std::move(j[1]["previous_path_y"]);
 						car.path_y= std::move(car_path_y);
-						// Previous path's end s and d values (corresponding to the last element in car.path_x[] and car.path_y[]
+
+						/* Previous path's end s and d values (corresponding to the last element in car.path_x[] and car.path_y[] .
+						 * Commented out because not used.
+						 */
 						// double end_path_s = j[1]["end_path_s"];
 						// double end_path_d = j[1]["end_path_d"];
 
@@ -187,8 +185,6 @@ int main() {
 						if (!last_boundary_conditions_init) {
 							assert(car.speed==.0);
 							pState->initBoundaryConditions({car.s,  0, 0}, {car.d, 0, 0});
-							// last_s_boundary_conditions[0] = car.s;
-							// last_d_boundary_conditions[0] = car.d;
 							last_boundary_conditions_init = true;
 						}
 
@@ -202,66 +198,6 @@ int main() {
 						const double remaining_path_duration = car.path_x.size()*tick;
 
 						// =============================
-
-						switch(car_state) {
-						case CarState::KL:
-#ifdef SKIP_THIS
-							// Find the closest vehicle in range preceding in the same lane (if any)
-							auto closest_info= findClosestInLane({car.s, car.d}, cars, lane, true, lane_width);
-							int closest_i= closest_info.first;  // Will be the position in cars[] of the found vehicle (if found)
-							double closest_dist=  closest_info.second;
-
-							/* If the distance is below a certain amount, set the target speed to the speed
-							 * of the preceding car, less some margin; otherwise set the target speed to the max cruise speed
-							 */
-							bool consider_lane_change= false;
-							if (closest_i >= 0 && closest_dist <= 50) {
-								target_speed= min(sqrt(pow(cars[closest_i].vx,2)+pow(cars[closest_i].vy,2))*.99, cruise_speed);
-								consider_lane_change= true;  // TODO not quite right, what if the preceding car is faster than cruise_speed?
-								// cout << "Separation=" << closest_dist << " car#" <<closest_i << " target_speed=" << target_speed << endl;
-							}
-							else
-								target_speed= cruise_speed;
-
-							if (consider_lane_change) {
-								cout << "Considering lane change." << endl;
-								// Which lanes should we consider for a lane change?
-								vector<unsigned> lanes;
-								if (lane==1)
-									lanes= {0u, 2u};
-								else
-									lanes= {1u};
-								int new_lane= -1;  // Will be set to the best lane to change to, or left set to -1 if no suitable lane change is found
-								double new_lane_speed= 0;
-
-								for (auto the_lane: lanes) {
-									// Find closest preceding vehicle (if any) in adjacent lane
-									auto preceding = findClosestInLane({car.s, car.d }, cars, the_lane, true, lane_width);
-									int preceding_i= preceding.first;
-									double preceding_dist= preceding.second;
-									if (preceding_i >=0)
-										cout << "Found preceding car in lane " << the_lane << " with distance " << preceding_dist << endl;
-									auto following = findClosestInLane({car.s, car.d }, cars, the_lane, false, lane_width);
-									int following_i= following.first;
-									double following_dist= following.second;
-									if (following_i >=0)
-										cout << "Found following car in lane " << the_lane << " with distance " << following_dist << endl;
-									// Is this lane change viable?
-									bool viable= true;
-									if (following_i >=0 && following_dist < 10)
-										viable= false;
-									else if (preceding_i >=0 && preceding_dist <15)
-										viable= false;
-									if (viable && (preceding_i<0 || (preceding_i>=0 && cars[preceding_i].getSpeed() > new_lane_speed))) {
-										new_lane= the_lane;
-										new_lane_speed= (preceding_i >= 0)? cars[preceding_i].getSpeed() : cruise_speed;
-									}
-
-								}
-								//if (new_lane>=0)
-								//	cout << "Decided for lane " << new_lane << " with speed " << new_lane_speed << endl;
-							}
-#endif
 
 						auto pTmp= pState->getNextState(car, cars);
 						if (pState.get() != pTmp)  // Need to make this check because unique_ptr::reset() doesn't do it
@@ -277,38 +213,6 @@ int main() {
 							auto sJMT= polynomials.first;
 							auto dJMT= polynomials.second;
 
-#ifdef SKIP_THIS
-							Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
-							Vector3d s_goal;// Goal conditions for s
-							int a_sign = (target_speed > s_start[1])? 1 : -1;
-							double proj_vel_s = s_start[1] + a_sign*max_accel_s*planning_t;
-							if ((a_sign > 0 && proj_vel_s < target_speed) || (a_sign < 0 && proj_vel_s > target_speed))
-								s_goal << s_start[0]+s_start[1]*planning_t+.5*(a_sign)*max_accel_s*pow(planning_t,2), proj_vel_s, a_sign*max_accel_s;
-							else {
-								double tx= a_sign*(target_speed - s_start[1]) / max_accel_s;
-								double s1= s_start[0] + s_start[1]*tx+.5*a_sign*max_accel_s*pow(tx,2);
-								double s2= (planning_t - tx) * target_speed;
-								s_goal << s1+s2, target_speed, 0;
-							}
-							cout << "s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
-
-							Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
-							Vector3d d_goal;// Goal conditions for d
-							d_goal << 2+lane*4, 0, 0;
-							cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
-
-							// Update the boundary conditions to be used at the beginning of the next JMT
-							last_s_boundary_conditions = s_goal;
-							if (last_s_boundary_conditions[0] >= max_s)
-								last_s_boundary_conditions[0]-=max_s;
-							last_d_boundary_conditions = d_goal;
-
-							// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
-							auto sJMT = computeJMT(s_start, s_goal, planning_t);
-							cout << "sJMT= " << sJMT.transpose() << endl << endl;
-							auto dJMT = computeJMT(d_start, d_goal, planning_t);
-							cout << "dJMT= " << dJMT.transpose() << endl << endl;
-#endif
 							/* Sample waypoints from the trajectory at time intervals of duration tick,
 							 * and store them in Cartesian (universal) coordinates. We want one waypoint at the end of every tick,
 							 * from time 0 to time planning_t
@@ -338,7 +242,6 @@ int main() {
 								next_y_vals.push_back(wpoint.second);
 							}
 						} // if (remaining_path_duration < min_trajectory_duration)
-						}
 
 						// Determine road heading, and use it to compute the s and d components of the car velocity
 						/*double road_h = coord_conv.getRoadHeading(car.s);
