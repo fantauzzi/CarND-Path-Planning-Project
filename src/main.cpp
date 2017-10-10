@@ -199,9 +199,15 @@ int main() {
 
 						// =============================
 
-						auto pTmp= pState->getNextState(car, cars);
-						if (pState.get() != pTmp)  // Need to make this check because unique_ptr::reset() doesn't do it
-							pState.reset(pTmp);
+						bool state_changed;
+						do {
+							state_changed=false;
+							auto pTmp= pState->getNextState(car, cars);
+							if (pState.get() != pTmp) {
+								pState.reset(pTmp);
+								state_changed= true;
+							}
+						} while(state_changed);
 						if (remaining_path_duration < min_trajectory_duration) {
 							cout << "Iteration# " << iterations << endl;
 							cout << "s=" << car.s << " d=" << car.d << " yaw=" << rad2deg(car.yaw) << endl;

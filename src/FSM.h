@@ -29,6 +29,17 @@ public:
 	virtual ~KeepLane() {};
 };
 
+class ChangeLane: public FSM_State {
+	double target_speed;
+	unsigned target_lane;
+public:
+	ChangeLane(const Car & car, const std::vector<CarSensorData> cars, unsigned target_lane);
+	virtual FSM_State * getNextState(const Car & car, const std::vector<CarSensorData> cars) override;  // TODO could I narrow to return a KeepLane * ?
+	virtual std::pair<Vector6d, Vector6d> computeBoundaryConditions() override;
+	virtual ~ChangeLane() {};
+};
+
+
 std::pair<double, double> findClosestInLane(Coordinates sd,  std::vector<CarSensorData> cars, unsigned lane, bool preceding, double lane_width );
 
 
