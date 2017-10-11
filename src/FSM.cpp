@@ -94,11 +94,12 @@ FSM_State * KeepLane::getNextState(const Car & theCar, const std::vector<CarSens
 				new_lane_speed= (preceding_i >= 0)? cars[preceding_i].getSpeed() : ConfigParams::cruise_speed;  // TODO this is not used!
 			}
 		}
-		if (new_lane >= 0)
+		if (new_lane >= 0) {
 			cout << "Changing from lane " << car.getLane() << " to lane " << new_lane << endl;
 			auto pNextState= new ChangeLane(car, cars, new_lane, new_lane_speed);
 			pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
 			return pNextState;
+		}
 	}
 	return this;
 }
@@ -144,6 +145,7 @@ ChangeLane::ChangeLane(
 		const unsigned target_lane_init,
 		const double target_speed_init):
 		FSM_State(car_init, cars_init), target_lane(target_lane_init), target_speed(target_speed_init) {
+	cout << "Instantiated ChangeLane with target_lane= "<< target_lane_init << " target_speed=" << target_speed_init << endl;
 }
 
 FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSensorData> theCars) {
