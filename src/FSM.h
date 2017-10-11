@@ -30,10 +30,10 @@ public:
 };
 
 class ChangeLane: public FSM_State {
-	double target_speed;
 	unsigned target_lane;
+	double target_speed;
 public:
-	ChangeLane(const Car & car, const std::vector<CarSensorData> cars, unsigned target_lane);
+	ChangeLane(const Car & car, const std::vector<CarSensorData> cars, const unsigned target_lane, const double target_speed);
 	virtual FSM_State * getNextState(const Car & car, const std::vector<CarSensorData> cars) override;  // TODO could I narrow to return a KeepLane * ?
 	virtual std::pair<Vector6d, Vector6d> computeBoundaryConditions() override;
 	virtual ~ChangeLane() {};

@@ -209,7 +209,7 @@ int main() {
 							}
 						} while(state_changed);
 						if (remaining_path_duration < min_trajectory_duration) {
-							cout << "Iteration# " << iterations << endl;
+							cout << endl << "Iteration# " << iterations << endl;
 							cout << "s=" << car.s << " d=" << car.d << " yaw=" << rad2deg(car.yaw) << endl;
 							cout << "speed=" << car.speed << endl;
 
@@ -231,10 +231,10 @@ int main() {
 								double wpoint_t= tick*(i_wpoint+1);
 								double next_s= evalQuintic(sJMT, wpoint_t);
 								ss.push_back(next_s);
-								if (next_s < previous_s && !close_enough(next_s, previous_s))
-								cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
-								if (next_s < car.s && ! close_enough(next_s, car.s))
-								cout << "ERROR: going backward  next_s= " << next_s << "  car.s= " << car.s << endl;
+								// if (next_s < previous_s && !close_enough(next_s, previous_s))
+									// cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
+								// if (next_s < car.s && ! close_enough(next_s, car.s))
+									// cout << "ERROR: going backward  next_s= " << next_s << "  car.s= " << car.s << endl;
 								double next_d= evalQuintic(dJMT, wpoint_t);
 								auto xy= coord_conv.getXY(next_s, next_d);
 								wpoints.push_back(xy);

@@ -61,7 +61,7 @@ FSM_State * KeepLane::getNextState(const Car & theCar, const std::vector<CarSens
 		target_speed= ConfigParams::cruise_speed;
 
 	if (consider_lane_change) {
-		cout << "Considering lane change." << endl;
+		// cout << "Considering lane change." << endl;
 		// Which lanes should we consider for a lane change?
 		vector<unsigned> lanes;
 		if (car.getLane()==1)
@@ -76,13 +76,13 @@ FSM_State * KeepLane::getNextState(const Car & theCar, const std::vector<CarSens
 			auto preceding = findClosestInLane({car.s, car.d }, cars, the_lane, true, ConfigParams::lane_width);
 			int preceding_i= preceding.first;
 			double preceding_dist= preceding.second;
-			if (preceding_i >=0)
-				cout << "Found preceding car in lane " << the_lane << " with distance " << preceding_dist << endl;
+			// if (preceding_i >=0)
+				// cout << "Found preceding car in lane " << the_lane << " with distance " << preceding_dist << endl;
 			auto following = findClosestInLane({car.s, car.d }, cars, the_lane, false, ConfigParams::lane_width);
 			int following_i= following.first;
 			double following_dist= following.second;
-			if (following_i >=0)
-				cout << "Found following car in lane " << the_lane << " with distance " << following_dist << endl;
+			// if (following_i >=0)
+				// cout << "Found following car in lane " << the_lane << " with distance " << following_dist << endl;
 			// Is this lane change viable?
 			bool viable= true;
 			if (following_i >=0 && following_dist < 10)
@@ -95,8 +95,10 @@ FSM_State * KeepLane::getNextState(const Car & theCar, const std::vector<CarSens
 			}
 		}
 		if (new_lane >= 0)
-			cout << "Changing to lane " << new_lane << endl;
-			return new ChangeLane(car, cars, new_lane);  // TODO ERROR! Here you are not copying last_s/d_boundary_conditions (and perhaps something more)!
+			cout << "Changing from lane " << car.getLane() << " to lane " << new_lane << endl;
+			auto pNextState= new ChangeLane(car, cars, new_lane, new_lane_speed);
+			pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
+			return pNextState;
 	}
 	return this;
 }
@@ -115,7 +117,7 @@ pair<Vector6d, Vector6d> KeepLane::computeBoundaryConditions() {
 		double s2= (ConfigParams::planning_t - tx) * target_speed;
 		s_goal << s1+s2, target_speed, 0;
 	}
-	cout << "s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
+	cout << "KeepLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
 	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
 	Vector3d d_goal;// Goal conditions for d
@@ -136,8 +138,12 @@ pair<Vector6d, Vector6d> KeepLane::computeBoundaryConditions() {
 	return {sJMT, dJMT};
 }
 
-ChangeLane::ChangeLane(const Car & car_init, const std::vector<CarSensorData> cars_init, unsigned target_lane_init):
-		FSM_State(car_init, cars_init), target_speed(.0), target_lane(target_lane_init) {
+ChangeLane::ChangeLane(
+		const Car & car_init,
+		const std::vector<CarSensorData> cars_init,
+		const unsigned target_lane_init,
+		const double target_speed_init):
+		FSM_State(car_init, cars_init), target_lane(target_lane_init), target_speed(target_speed_init) {
 }
 
 FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSensorData> theCars) {
@@ -145,9 +151,11 @@ FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSe
 	cars= theCars;
 
 	// Is the change of lane complete?
-	if (abs(car.d-(ConfigParams::lane_width/2+target_lane*ConfigParams::lane_width)) < .5)  // TODO tune this
-		return new KeepLane(car, cars);
-
+	if (abs(car.d-(ConfigParams::lane_width/2+target_lane*ConfigParams::lane_width)) < .5)  { // TODO tune this
+		auto pNextState= new KeepLane(car, cars);
+		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
+		return pNextState;
+	}
 	return this;
 }
 
@@ -166,7 +174,7 @@ pair<Vector6d, Vector6d> ChangeLane::computeBoundaryConditions() {
 		double s2= (ConfigParams::planning_t - tx) * target_speed;
 		s_goal << s1+s2, target_speed, 0;
 	}
-	cout << "s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
+	cout << "ChangeLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
 	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
 	Vector3d d_goal;// Goal conditions for d
