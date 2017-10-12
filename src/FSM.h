@@ -4,6 +4,7 @@
 #include "Eigen/Core"
 #include "trajectory.h"
 #include "Car.h"
+#include "ConfigParams.h"
 
 class FSM_State {
 protected:
@@ -17,6 +18,7 @@ public:
 	virtual FSM_State * getNextState(const Car & car, const std::vector<CarSensorData> cars)=0;
 	virtual std::pair<Vector6d, Vector6d> computeBoundaryConditions()=0;
 	virtual void initBoundaryConditions(Eigen::Vector3d s_init, Eigen::Vector3d d_init);
+	virtual double getPlanningTime() const =0;
 	virtual ~FSM_State() {};
 };
 
@@ -26,6 +28,9 @@ public:
 	KeepLane(const Car & car, const std::vector<CarSensorData> cars);
 	virtual FSM_State * getNextState(const Car & car, const std::vector<CarSensorData> cars) override;  // TODO could I narrow to return a KeepLane * ?
 	virtual std::pair<Vector6d, Vector6d> computeBoundaryConditions() override;
+	virtual double getPlanningTime() const override {
+		return ConfigParams::planning_t_KL;
+	}
 	virtual ~KeepLane() {};
 };
 
@@ -36,6 +41,9 @@ public:
 	ChangeLane(const Car & car, const std::vector<CarSensorData> cars, const unsigned target_lane, const double target_speed);
 	virtual FSM_State * getNextState(const Car & car, const std::vector<CarSensorData> cars) override;  // TODO could I narrow to return a KeepLane * ?
 	virtual std::pair<Vector6d, Vector6d> computeBoundaryConditions() override;
+	virtual double getPlanningTime() const override {
+		return ConfigParams::planning_t_CL;
+	}
 	virtual ~ChangeLane() {};
 };
 

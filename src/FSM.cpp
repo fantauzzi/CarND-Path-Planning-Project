@@ -109,20 +109,20 @@ pair<Vector6d, Vector6d> KeepLane::computeBoundaryConditions() {
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
 	int a_sign = (target_speed > s_start[1])? 1 : -1;
-	double proj_vel_s = s_start[1] + a_sign*ConfigParams::max_accel_s*ConfigParams::planning_t;
+	double proj_vel_s = s_start[1] + a_sign*ConfigParams::max_accel_s*ConfigParams::planning_t_KL;
 	if ((a_sign > 0 && proj_vel_s < target_speed) || (a_sign < 0 && proj_vel_s > target_speed))
-		s_goal << s_start[0]+s_start[1]*ConfigParams::planning_t+.5*(a_sign)*ConfigParams::max_accel_s*pow(ConfigParams::planning_t,2), proj_vel_s, a_sign*ConfigParams::max_accel_s;
+		s_goal << s_start[0]+s_start[1]*ConfigParams::planning_t_KL+.5*(a_sign)*ConfigParams::max_accel_s*pow(ConfigParams::planning_t_KL,2), proj_vel_s, a_sign*ConfigParams::max_accel_s;
 	else {
 		double tx= a_sign*(target_speed - s_start[1]) / ConfigParams::max_accel_s;
 		double s1= s_start[0] + s_start[1]*tx+.5*a_sign*ConfigParams::max_accel_s*pow(tx,2);
-		double s2= (ConfigParams::planning_t - tx) * target_speed;
+		double s2= (ConfigParams::planning_t_KL - tx) * target_speed;
 		s_goal << s1+s2, target_speed, 0;
 	}
 	cout << "KeepLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
 	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
 	Vector3d d_goal;// Goal conditions for d
-	d_goal << 2+car.getLane()*4, 0, 0;
+	d_goal << ConfigParams::lane_width/2+car.getLane()*ConfigParams::lane_width, 0, 0;
 	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
 	// Update the boundary conditions to be used at the beginning of the next JMT
@@ -132,9 +132,9 @@ pair<Vector6d, Vector6d> KeepLane::computeBoundaryConditions() {
 	last_d_boundary_conditions = d_goal;
 
 	// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
-	auto sJMT = computeJMT(s_start, s_goal, ConfigParams::planning_t);
+	auto sJMT = computeJMT(s_start, s_goal, ConfigParams::planning_t_KL);
 	cout << "sJMT= " << sJMT.transpose() << endl << endl;
-	auto dJMT = computeJMT(d_start, d_goal, ConfigParams::planning_t);
+	auto dJMT = computeJMT(d_start, d_goal, ConfigParams::planning_t_KL);
 	cout << "dJMT= " << dJMT.transpose() << endl << endl;
 	return {sJMT, dJMT};
 }
@@ -153,7 +153,7 @@ FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSe
 	cars= theCars;
 
 	// Is the change of lane complete?
-	if (abs(car.d-(ConfigParams::lane_width/2+target_lane*ConfigParams::lane_width)) < .5)  { // TODO tune this
+	if (abs(car.d-(ConfigParams::lane_width/2+target_lane*ConfigParams::lane_width)) < .2)  { // TODO tune this
 		auto pNextState= new KeepLane(car, cars);
 		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
 		return pNextState;
@@ -167,20 +167,20 @@ pair<Vector6d, Vector6d> ChangeLane::computeBoundaryConditions() {
 	Vector3d s_goal;// Goal conditions for s
 
 	int a_sign = (target_speed > s_start[1])? 1 : -1;
-	double proj_vel_s = s_start[1] + a_sign*ConfigParams::max_accel_s*ConfigParams::planning_t;
+	double proj_vel_s = s_start[1] + a_sign*ConfigParams::max_accel_s*ConfigParams::planning_t_CL;
 	if ((a_sign > 0 && proj_vel_s < target_speed) || (a_sign < 0 && proj_vel_s > target_speed))
-		s_goal << s_start[0]+s_start[1]*ConfigParams::planning_t+.5*(a_sign)*ConfigParams::max_accel_s*pow(ConfigParams::planning_t,2), proj_vel_s, a_sign*ConfigParams::max_accel_s;
+		s_goal << s_start[0]+s_start[1]*ConfigParams::planning_t_CL+.5*(a_sign)*ConfigParams::max_accel_s*pow(ConfigParams::planning_t_CL,2), proj_vel_s, a_sign*ConfigParams::max_accel_s;
 	else {
 		double tx= a_sign*(target_speed - s_start[1]) / ConfigParams::max_accel_s;
 		double s1= s_start[0] + s_start[1]*tx+.5*a_sign*ConfigParams::max_accel_s*pow(tx,2);
-		double s2= (ConfigParams::planning_t - tx) * target_speed;
+		double s2= (ConfigParams::planning_t_CL - tx) * target_speed;
 		s_goal << s1+s2, target_speed, 0;
 	}
 	cout << "ChangeLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
 	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
 	Vector3d d_goal;// Goal conditions for d
-	d_goal << 2+target_lane*4, 0, 0;
+	d_goal << ConfigParams::lane_width/2+target_lane*ConfigParams::lane_width, 0, 0;
 	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
 	// Update the boundary conditions to be used at the beginning of the next JMT
@@ -190,9 +190,9 @@ pair<Vector6d, Vector6d> ChangeLane::computeBoundaryConditions() {
 	last_d_boundary_conditions = d_goal;
 
 	// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
-	auto sJMT = computeJMT(s_start, s_goal, ConfigParams::planning_t);
+	auto sJMT = computeJMT(s_start, s_goal, ConfigParams::planning_t_CL);
 	cout << "sJMT= " << sJMT.transpose() << endl << endl;
-	auto dJMT = computeJMT(d_start, d_goal, ConfigParams::planning_t);
+	auto dJMT = computeJMT(d_start, d_goal, ConfigParams::planning_t_CL);
 	cout << "dJMT= " << dJMT.transpose() << endl << endl;
 	return {sJMT, dJMT};
 

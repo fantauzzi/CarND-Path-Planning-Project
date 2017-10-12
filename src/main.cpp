@@ -225,7 +225,7 @@ int main() {
 							 */
 							vector<pair<double, double>> wpoints; // Will hold the sampled waypoints
 							vector<double> ss;
-							unsigned n_planning_wpoints=static_cast<int>(round(planning_t / tick));
+							unsigned n_planning_wpoints=static_cast<int>(round(pState->getPlanningTime() / tick));
 							// double previous_s =-1;
 							for (unsigned i_wpoint=0; i_wpoint<n_planning_wpoints; ++i_wpoint) {
 								double wpoint_t= tick*(i_wpoint+1);
