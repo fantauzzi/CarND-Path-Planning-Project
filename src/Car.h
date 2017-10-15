@@ -69,5 +69,8 @@ struct Car {
 	double speed;
 	std::vector<double> path_x;
 	std::vector<double> path_y;
+	Car(const FrenetCartesianConverter & converter);
+	FrenetCartesianConverter converter;
 	unsigned getLane() const;
+	Coordinates getFrenetVelocity() const;
 };

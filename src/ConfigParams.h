@@ -10,10 +10,10 @@ namespace ConfigParams {
 
 	// The planning time interval; when planning a path, it is planned to be worth these many seconds
 	constexpr double planning_t_KL = 1;
-	constexpr double planning_t_CL = 3;
+	constexpr double planning_t_CL = 2;
 
 	// Desired cruise speed, that the behaviour planning shall try to attain and keep when possible
-	constexpr double cruise_speed = 21.4579;
+	constexpr double cruise_speed = 21.0109;
 
 			// Maximum acceptable acceleration for the car, the car will try to reach it in order to get to target_sped in the shortest time
 	constexpr double max_accel_s = 7.2;

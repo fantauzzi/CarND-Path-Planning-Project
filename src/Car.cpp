@@ -6,6 +6,14 @@
 
 using namespace std;
 
+// TODO should the function below be a method of FrenetCartesianConverter?
+Coordinates calculateFrenetVelocity(const FrenetCartesianConverter & converter, const double s, const double speed, const double yaw)  {
+	double road_h = converter.getRoadHeading(s);
+	double car_vel_s= speed *cos(yaw - road_h);
+	double car_vel_d= -speed*sin(yaw - road_h); // d=0 on the yellow center line, and increases toward the outer of the track
+	return { car_vel_s, car_vel_d };
+}
+
 CarSensorData::CarSensorData(vector<double> sensorInfo, const FrenetCartesianConverter & the_converter):
 		id(static_cast<unsigned>(sensorInfo[0])),
 		x(sensorInfo[1]),
@@ -40,10 +48,11 @@ double CarSensorData::getYaw() const {
 
 
 Coordinates CarSensorData::getFrenetVelocity() const {
-	double road_h = converter.getRoadHeading(s);
+	return calculateFrenetVelocity(converter, s, getSpeed(), getYaw());
+	/*double road_h = converter.getRoadHeading(s);
 	double car_vel_s= getSpeed() *cos(getYaw() - road_h);
 	double car_vel_d= -getSpeed()*sin(getYaw() - road_h); // d=0 on the yellow center line, and increases toward the outer of the track
-	return { car_vel_s, car_vel_d };
+	return { car_vel_s, car_vel_d };*/
 }
 
 
@@ -65,7 +74,15 @@ double CarSensorData::measureSeparationFrom(const double other_s) const {
 	return sep;
 }
 
+Car::Car(const FrenetCartesianConverter & converter_ini): converter(converter_ini) {
+
+}
+
 unsigned Car::getLane() const {
 	auto lane = floor(d/ConfigParams::lane_width);
 	return static_cast<unsigned>(lane);
+}
+
+Coordinates Car::getFrenetVelocity() const {
+	return calculateFrenetVelocity(converter, s, speed, yaw);
 }

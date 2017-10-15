@@ -102,7 +102,8 @@ int main() {
 	// ofstream log_file;
 	// log_file.open ("/home/fanta/workspace/CarND-Path-Planning-Project/data/log.txt");
 
-	Car car;
+	auto converter= FrenetCartesianConverter(map_waypoints_s, map_waypoints_x, map_waypoints_y, map_waypoints_dx, map_waypoints_dy);
+	Car car(converter);  // TODO make Car a proper class, with a xtor: it cannot exist without a converter (see below)!
 	vector<CarSensorData> cars;
 	unique_ptr<FSM_State> pState= make_unique<KeepLane>(car, cars);
 
