@@ -19,11 +19,15 @@ public:
 	virtual std::pair<Vector6d, Vector6d> computeBoundaryConditions()=0;
 	virtual void initBoundaryConditions(Eigen::Vector3d s_init, Eigen::Vector3d d_init);
 	virtual double getPlanningTime() const =0;
+	virtual std::pair<Eigen::Vector3d, Eigen::Vector3d> getGoalConditions(const double target_s,
+			const double target_d,
+			const double target_v,
+			const double planning_t) const;
 	virtual ~FSM_State() {};
 };
 
 class KeepLane: public FSM_State {
-	double target_speed;
+	double target_speed;  // TODO do I need it as a data member?
 public:
 	KeepLane(const Car & car, const std::vector<CarSensorData> cars);
 	virtual FSM_State * getNextState(const Car & car, const std::vector<CarSensorData> cars) override;  // TODO could I narrow to return a KeepLane * ?

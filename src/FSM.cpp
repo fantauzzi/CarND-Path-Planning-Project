@@ -183,7 +183,7 @@ FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSe
 	return this;
 }
 
-pair<Vector6d, Vector6d> ChangeLane::computeBoundaryConditions() {
+pair<Vector6d, Vector6d> ChangeLane::computeBoundaryConditions() {  // TODO name is incorrect, as method returns the polynomials, not the boundary conditions
 
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
@@ -220,5 +220,43 @@ pair<Vector6d, Vector6d> ChangeLane::computeBoundaryConditions() {
 	auto dJMT = computeJMT(d_start, d_goal, ConfigParams::planning_t_CL);
 	cout << "dJMT= " << dJMT.transpose() << endl << endl;
 	return {sJMT, dJMT};
+}
 
+/**
+ * Determines the goal boundary conditions for a jerk minimising trajectory (JMT). It uses the boundary conditions
+ * stored in `last_s_boundary_conditions` and `last_d_boundary_conditions` as the starting boundary conditions for the JMT.
+ * @param target_s the s Frenet coordinate of the desired car position at the end of the trajectory (in meters).
+ * @param target_d the d Frenet coordinate of the desired car position at the end of the trajectory (in meters).
+ * @param target_v the desired car velocity (in m/s) at the end of the trajectory.
+ * @param planning_t the time (in seconds) for the car to cover the trajectory.
+ * @return
+ */
+pair<Vector3d, Vector3d> FSM_State::getGoalConditions(const double target_s,
+		const double target_d,
+		const double target_v,
+		const double planning_t) const {
+	assert(boundary_conditions_initialised);
+	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
+	Vector3d s_goal;// Goal conditions for s
+
+	/* Could it be in the base class?
+	 * - Compute possible s_goal and d_goal conditions based on kynematic equations, target lane and
+	 * planning time interval.
+	 * - Randomly perturb the found s_goal and d_goal to generate more candidate trajectories
+	 * - Select the trajectory with the lowest cost
+	 */
+
+	/*
+	 * How to compute possible s_goal and d_goal.
+	 * - Assume a linear trajectory from start to goal (its length will be a lower bound
+	 * for the actual trajectory length).
+	 * - With kynematic equations, determine how much distance the car will cover in the given
+	 * planning time.
+	 * - Determine the consequent goal_s and goal_d
+	 *
+	 */
+
+	Vector3d dummy1, dummy2;
+
+	return { dummy1, dummy2};
 }
