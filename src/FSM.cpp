@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <random>
 #include "Eigen/Core"
 #include "FSM.h"
 #include "Car.h"
@@ -110,7 +111,75 @@ FSM_State * KeepLane::getNextState(const Car & theCar, const std::vector<CarSens
 	return this;
 }
 
-pair<Vector6d, Vector6d> FollowCar::computeBoundaryConditions() {
+/**
+ * Determines the cost of a trajectory between time 0 and a given time. The trajectory must be given
+ * as two quintic polynomials s(t) and d(t).
+ * @param s_coeffs coefficients of the trajectory s component.
+ * @param d_coeffs coefficients of the trajectory d component.
+ * @param t the duration of the time interval during which to evaluate the trajectory.
+ * @return the calculated cost, between 0 and 1, inclusive.
+ */
+double cost(const Vector6d s_coeffs, const Vector6d d_coeffs, const double t) {
+	// Determine max velocity, max acceleration, max jerk, overall lateral jerk and overall longitudinal jerk
+}
+
+pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
+	/* Compute a basic trajectory first, then generate variations and choose the one with lowest cost
+	 *
+	 */
+
+	// Determine the boundary conditions for s and d for the JMT
+
+	Vector3d s_start= last_s_boundary_conditions;// Initial conditions for s
+	Vector3d d_start= last_d_boundary_conditions;// Initial conditions for s
+	auto b_cond= computeGoalBoundaryConditions();
+	Vector3d s_goal= b_cond.first;
+	Vector3d d_goal= b_cond.second;
+
+	// Compute the quintic polynomial (JMT) coefficients, for the given boundary conditions and planning time interval
+
+	// Generate additional random boundary conditions and the corresponding JMTs
+
+	vector<Vector3d> s_goal_variations;
+	vector<Vector6d> sJMT_variations;
+	vector<Vector6d> dJMT_variations;
+
+	s_goal_variations.push_back(s_goal);
+	auto sJMT = computeJMT(s_start, s_goal, getPlanningTime());
+	auto dJMT = computeJMT(d_start, d_goal, getPlanningTime());
+	sJMT_variations.push_back(sJMT);
+	dJMT_variations.push_back(dJMT);
+	cout << "sJMT= " << sJMT.transpose() << endl << endl;
+	cout << "dJMT= " << dJMT.transpose() << endl << endl;
+
+	default_random_engine generator;
+	normal_distribution<double> distribution(s_goal[0], (s_goal[0] - s_start[0])/10);
+
+	for (unsigned i=0; i< 9; ++i) {
+		const double s_variation= distribution(generator);
+		Vector3d s_varied;
+		s_varied << s_variation, s_goal[1], s_goal[2];
+		s_goal_variations.push_back(s_varied);
+		auto sJMT_varied = computeJMT(s_start, s_varied, getPlanningTime());
+		auto dJMT_varied = computeJMT(d_start, d_goal, getPlanningTime());
+		sJMT_variations.push_back(sJMT_varied);
+		dJMT_variations.push_back(dJMT_varied);
+	}
+
+	// Update the boundary conditions to be used at the next iteration
+	last_s_boundary_conditions = s_goal;
+	if (last_s_boundary_conditions[0] >= ConfigParams::max_s)
+		last_s_boundary_conditions[0]-= ConfigParams::max_s;
+	last_d_boundary_conditions = d_goal;
+
+	// Determine their costs
+	// Choose the JMT with minimum cost
+
+	return {sJMT, dJMT};
+
+}
+
+pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 	assert(boundary_conditions_initialised);
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
@@ -162,22 +231,10 @@ pair<Vector6d, Vector6d> FollowCar::computeBoundaryConditions() {
 	d_goal << ConfigParams::lane_width/2+car.getLane()*ConfigParams::lane_width, 0, 0;
 	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
-	// Update the boundary conditions to be used at the beginning of the next JMT
-	last_s_boundary_conditions = s_goal;
-	if (last_s_boundary_conditions[0] >= ConfigParams::max_s)
-		last_s_boundary_conditions[0]-= ConfigParams::max_s;
-	last_d_boundary_conditions = d_goal;
-
-	// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
-	auto sJMT = computeJMT(s_start, s_goal, ConfigParams::planning_t_KL);
-	cout << "sJMT= " << sJMT.transpose() << endl << endl;
-	auto dJMT = computeJMT(d_start, d_goal, ConfigParams::planning_t_KL);
-	cout << "dJMT= " << dJMT.transpose() << endl << endl;
-	return {sJMT, dJMT};
+	return { s_goal, d_goal };
 }
 
-
-pair<Vector6d, Vector6d> KeepLane::computeBoundaryConditions() {
+pair<Vector3d, Vector3d> KeepLane::computeGoalBoundaryConditions() {
 	assert(boundary_conditions_initialised);
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
@@ -220,19 +277,9 @@ pair<Vector6d, Vector6d> KeepLane::computeBoundaryConditions() {
 	d_goal << ConfigParams::lane_width/2+car.getLane()*ConfigParams::lane_width, 0, 0;
 	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
-	// Update the boundary conditions to be used at the beginning of the next JMT
-	last_s_boundary_conditions = s_goal;
-	if (last_s_boundary_conditions[0] >= ConfigParams::max_s)
-		last_s_boundary_conditions[0]-= ConfigParams::max_s;
-	last_d_boundary_conditions = d_goal;
-
-	// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
-	auto sJMT = computeJMT(s_start, s_goal, ConfigParams::planning_t_KL);
-	cout << "sJMT= " << sJMT.transpose() << endl << endl;
-	auto dJMT = computeJMT(d_start, d_goal, ConfigParams::planning_t_KL);
-	cout << "dJMT= " << dJMT.transpose() << endl << endl;
-	return {sJMT, dJMT};
+	return { s_goal, d_goal };
 }
+
 
 ChangeLane::ChangeLane(
 		const Car & car_init,
@@ -256,7 +303,7 @@ FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSe
 	return this;
 }
 
-pair<Vector6d, Vector6d> ChangeLane::computeBoundaryConditions() {  // TODO name is incorrect, as method returns the polynomials, not the boundary conditions
+pair<Vector3d, Vector3d> ChangeLane::computeGoalBoundaryConditions() {  // TODO name is incorrect, as method returns the polynomials, not the boundary conditions
 
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
@@ -292,44 +339,7 @@ pair<Vector6d, Vector6d> ChangeLane::computeBoundaryConditions() {  // TODO name
 	cout << "sJMT= " << sJMT.transpose() << endl << endl;
 	auto dJMT = computeJMT(d_start, d_goal, ConfigParams::planning_t_CL);
 	cout << "dJMT= " << dJMT.transpose() << endl << endl;
-	return {sJMT, dJMT};
+	// return {sJMT, dJMT};
+	return {s_goal, d_goal};
 }
 
-/**
- * Determines the goal boundary conditions for a jerk minimising trajectory (JMT). It uses the boundary conditions
- * stored in `last_s_boundary_conditions` and `last_d_boundary_conditions` as the starting boundary conditions for the JMT.
- * @param target_s the s Frenet coordinate of the desired car position at the end of the trajectory (in meters).
- * @param target_d the d Frenet coordinate of the desired car position at the end of the trajectory (in meters).
- * @param target_v the desired car velocity (in m/s) at the end of the trajectory.
- * @param planning_t the time (in seconds) for the car to cover the trajectory.
- * @return
- */
-pair<Vector3d, Vector3d> FSM_State::getGoalConditions(const double target_s,
-		const double target_d,
-		const double target_v,
-		const double planning_t) const {
-	assert(boundary_conditions_initialised);
-	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
-	Vector3d s_goal;// Goal conditions for s
-
-	/* Could it be in the base class?
-	 * - Compute possible s_goal and d_goal conditions based on kynematic equations, target lane and
-	 * planning time interval.
-	 * - Randomly perturb the found s_goal and d_goal to generate more candidate trajectories
-	 * - Select the trajectory with the lowest cost
-	 */
-
-	/*
-	 * How to compute possible s_goal and d_goal.
-	 * - Assume a linear trajectory from start to goal (its length will be a lower bound
-	 * for the actual trajectory length).
-	 * - With kynematic equations, determine how much distance the car will cover in the given
-	 * planning time.
-	 * - Determine the consequent goal_s and goal_d
-	 *
-	 */
-
-	Vector3d dummy1, dummy2;
-
-	return { dummy1, dummy2};
-}

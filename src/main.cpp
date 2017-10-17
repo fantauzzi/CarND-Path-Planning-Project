@@ -216,7 +216,7 @@ int main() {
 
 							// Determine boundary conditions for quintic polynomial (car trajectory in Frenet coordinates)
 
-							auto polynomials= pState->computeBoundaryConditions();
+							auto polynomials= pState->generateTrajectory();
 							auto sJMT= polynomials.first;
 							auto dJMT= polynomials.second;
 
