@@ -20,3 +20,16 @@ Vector6d computeJMT(const Eigen::Vector3d start, const Eigen::Vector3d goal, dou
 
 
 double evalQuintic(Vector6d coeffs, double x);
+
+double measureQuinticArcLength(const Vector6d coeffs, const double x0, const double x1, const double step);
+
+/**
+ * Calculates the jerk minimising trajectory for the given car to get, or remain, in the given lane.
+ * @param car the given car.
+ * @param target_lane the number of the lane where the car should end up
+ * @param time the planned duration, in seconds, for the trajectory
+ * @return the coefficients of a quintic polynomial providing the desired trajectory
+ */
+// Vector6d computeJMT(const Car & car, const unsigned target_lane, const double time);
+
+

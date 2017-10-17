@@ -109,11 +109,26 @@ pair<Vector6d, Vector6d> KeepLane::computeBoundaryConditions() {
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
 
+	/* Could it be in the base class?
+	 * - Compute possible s_goal and d_goal conditions based on kynematic equations, target lane and
+	 * planning time interval.
+	 * - Randomly perturb the found s_goal and d_goal to generate more candidate trajectories
+	 * - Select the trajectory with the lowest cost
+	 */
+
+	/*
+	 * How to compute possible s_goal and d_goal.
+	 * - Assume a linear trajectory from start to goal (its length will be a lower bound
+	 * for the actual trajectory length).
+	 * - With kynematic equations, determine how much distance the car will cover in the given
+	 * planning time.
+	 * - Determine the consequent goal_s and goal_d
+	 *
+	 */
+
 	// Determine the s component of the target speed at the car position
 	double road_h = car.converter.getRoadHeading(car.s);  // TODO yuck!
 	double target_speed_s= target_speed*cos(car.yaw- road_h);
-	// double car_vel_d= -car.speed*sin(car.yaw-road_h);// d=0 on the yellow center line, and increases toward the outer of the track*/
-
 
 	int a_sign = (target_speed_s > s_start[1])? 1 : -1;
 	double proj_vel_s = s_start[1] + a_sign*ConfigParams::max_accel_s*ConfigParams::planning_t_KL;
@@ -173,15 +188,18 @@ pair<Vector6d, Vector6d> ChangeLane::computeBoundaryConditions() {
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
 
-	int a_sign = (target_speed > s_start[1])? 1 : -1;
+	double road_h = car.converter.getRoadHeading(car.s);  // TODO yuck!
+	double target_speed_s= target_speed*cos(car.yaw- road_h);
+
+	int a_sign = (target_speed_s > s_start[1])? 1 : -1;
 	double proj_vel_s = s_start[1] + a_sign*ConfigParams::max_accel_s*ConfigParams::planning_t_CL;
-	if ((a_sign > 0 && proj_vel_s < target_speed) || (a_sign < 0 && proj_vel_s > target_speed))
+	if ((a_sign > 0 && proj_vel_s < target_speed_s) || (a_sign < 0 && proj_vel_s > target_speed_s))
 		s_goal << s_start[0]+s_start[1]*ConfigParams::planning_t_CL+.5*(a_sign)*ConfigParams::max_accel_s*pow(ConfigParams::planning_t_CL,2), proj_vel_s, a_sign*ConfigParams::max_accel_s;
 	else {
-		double tx= a_sign*(target_speed - s_start[1]) / ConfigParams::max_accel_s;
+		double tx= a_sign*(target_speed_s - s_start[1]) / ConfigParams::max_accel_s;
 		double s1= s_start[0] + s_start[1]*tx+.5*a_sign*ConfigParams::max_accel_s*pow(tx,2);
-		double s2= (ConfigParams::planning_t_CL - tx) * target_speed;
-		s_goal << s1+s2, target_speed, 0;
+		double s2= (ConfigParams::planning_t_CL - tx) * target_speed_s;
+		s_goal << s1+s2, target_speed_s, 0;
 	}
 	cout << "ChangeLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
