@@ -9,20 +9,22 @@ namespace ConfigParams {
 	static constexpr double lane_width= 4.;
 
 	// The planning time interval; when planning a path, it is planned to be worth these many seconds
-	constexpr double planning_t_KL = 1;
+	// constexpr double planning_t_KL = 2.5;
+	constexpr double planning_t_KL = 2.3;
 	constexpr double planning_t_CL = 2.5;
 
 	// Desired cruise speed, that the behaviour planning shall try to attain and keep when possible
 	constexpr double cruise_speed = 21.0109;
 
 			// Maximum acceptable acceleration for the car, the car will try to reach it in order to get to target_sped in the shortest time
-	constexpr double max_accel_s = 7.2;
+	constexpr double max_accel_s = 6;
 
 	// Time interval between two consecutive waypoints, as implemented by the simulator
 	constexpr double tick = 0.02;
 
 	// When the planned trajectory yet to be run goes under this duration, extend it by planning a new trajectory
-	constexpr double min_trajectory_duration = 0.5;
+	// constexpr double min_trajectory_duration = 0.5;
+	constexpr double min_trajectory_duration = 0.2;
 
 	// Simulated sensors range; vehicles that are reported by the simulator outside this range are ignored
 	constexpr double sensor_range= 300;

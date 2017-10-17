@@ -30,12 +30,24 @@ class KeepLane: public FSM_State {
 	double target_speed;  // TODO do I need it as a data member?
 public:
 	KeepLane(const Car & car, const std::vector<CarSensorData> cars);
-	virtual FSM_State * getNextState(const Car & car, const std::vector<CarSensorData> cars) override;  // TODO could I narrow to return a KeepLane * ?
+	virtual FSM_State * getNextState(const Car & car, const std::vector<CarSensorData> cars) override;
 	virtual std::pair<Vector6d, Vector6d> computeBoundaryConditions() override;
 	virtual double getPlanningTime() const override {
 		return ConfigParams::planning_t_KL;
 	}
 	virtual ~KeepLane() {};
+};
+
+class FollowCar: public FSM_State {
+	double target_speed;  // TODO do I need it as a data member?
+public:
+	FollowCar(const Car & car, const std::vector<CarSensorData> cars);
+	virtual FSM_State * getNextState(const Car & car, const std::vector<CarSensorData> cars) override;
+	virtual std::pair<Vector6d, Vector6d> computeBoundaryConditions() override;
+	virtual double getPlanningTime() const override {
+		return ConfigParams::planning_t_KL;
+	}
+	virtual ~FollowCar() {};
 };
 
 class ChangeLane: public FSM_State {
