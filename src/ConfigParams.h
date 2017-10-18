@@ -1,4 +1,5 @@
 #pragma once
+#include <random>
 
 /**
  * Collects parameters governing the simulation and the driving. All measures use
@@ -10,17 +11,20 @@ namespace ConfigParams {
 
 	// The planning time interval; when planning a path, it is planned to be worth these many seconds
 	// constexpr double planning_t_KL = 2.5;
-	constexpr double planning_t_KL = 2.0;
+	constexpr double planning_t_KL = 2.3;
 	constexpr double planning_t_CL = 2.5;
 
 	// Desired cruise speed, that the behaviour planning shall try to attain and keep when possible
 	constexpr double cruise_speed = 21.0109;
 
+	// Speed limit
+	constexpr double speed_limit= 22.35;
+
 	// Desired safe distance between the car and another car preceding in the same lane
 	constexpr double safe_distance= 2*cruise_speed;
 
 	// Maximum acceptable acceleration for the car, the car will try to reach it in order to get to target_sped in the shortest time
-	constexpr double max_accel_s = 6;
+	constexpr double max_accel_s = 5;
 
 	// Time interval between two consecutive waypoints, as implemented by the simulator
 	constexpr double tick = 0.02;
@@ -34,4 +38,10 @@ namespace ConfigParams {
 
 	// The length of the the track and the max value of s in Frenet coordinates
 	constexpr double max_s = 6945.554;
+
+	// Number of trajectory variations from where to sample the next trajectory
+	constexpr unsigned n_trajectories= 50;
+
+	// The random number generator
+	static std::default_random_engine rng;
 }
