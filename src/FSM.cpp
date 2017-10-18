@@ -4,6 +4,7 @@
 #include <vector>
 #include <cmath>
 #include <random>
+#include <algorithm>
 #include "Eigen/Core"
 #include "FSM.h"
 #include "Car.h"
@@ -12,27 +13,6 @@
 
 using namespace std;
 using namespace Eigen;
-
-/**
- * Computes the minimum safe distance from a precedeing vehicle for a car with given speed.
- * @param the car speed, in m/s.
- * @return the computed minimum safe distance, in meters.
- */
-
-/*
- double getMinSafeDistance(const double v) {
-	return 2*v;
-}
-
-double getMaxSafeDistance(const double v) {
-	return 3*v;
-}
-*/
-
-double getSafeDistance(const double v) {
-	return 2*ConfigParams::cruise_speed;
-}
-
 
 pair<double, double> findClosestInLane(Coordinates sd,  vector<CarSensorData> cars, unsigned lane, bool preceding, double lane_width ) {
 	int closest_i= -1;  // Will be the position in cars[] of the found vehicle (if found)
@@ -81,7 +61,7 @@ FSM_State * FollowCar::getNextState(const Car & theCar, const std::vector<CarSen
 	 * Set the next state to KeepLane also if no preceding car was found.
 	 */
 
-	if ((closest_i >= 0 && closest_dist >= getSafeDistance(car.speed)*2) || closest_i < 0) {
+	if ((closest_i >= 0 && closest_dist >= ConfigParams::safe_distance*1.6) || closest_i < 0) {
 		auto pNextState= new KeepLane(car, cars);
 		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
 		return pNextState;
@@ -101,7 +81,7 @@ FSM_State * KeepLane::getNextState(const Car & theCar, const std::vector<CarSens
 	double closest_dist=  closest_info.second;
 
 	// If the distance is below the computed safe distance, then set the next state to FollowCar
-	if (closest_i >= 0 && closest_dist < getSafeDistance(car.speed)) {
+	if (closest_i >= 0 && closest_dist < ConfigParams::safe_distance) {
 		auto pNextState= new FollowCar(car, cars);
 		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
 		return pNextState;
@@ -109,6 +89,15 @@ FSM_State * KeepLane::getNextState(const Car & theCar, const std::vector<CarSens
 
 	// Otherwise, just stay in the current state
 	return this;
+}
+
+
+Vector6d differentiate (const Vector6d coeffs) {
+	Vector6d res;
+	for (unsigned i=0; i<5; ++i)
+		res[i]=(i+1)*coeffs[i+1];
+	res[5]=0;
+	return res;
 }
 
 /**
@@ -119,8 +108,56 @@ FSM_State * KeepLane::getNextState(const Car & theCar, const std::vector<CarSens
  * @param t the duration of the time interval during which to evaluate the trajectory.
  * @return the calculated cost, between 0 and 1, inclusive.
  */
-double cost(const Vector6d s_coeffs, const Vector6d d_coeffs, const double t) {
+double cost(
+		const Vector6d s_coeffs,
+		const Vector6d d_coeffs,
+		const double time_interval) {
 	// Determine max velocity, max acceleration, max jerk, overall lateral jerk and overall longitudinal jerk
+
+
+	auto s_diff= s_coeffs;
+	auto d_diff= d_coeffs;
+	constexpr double delta_t=ConfigParams::tick;
+	const unsigned n_intervals= static_cast<unsigned>(round(time_interval/delta_t));
+
+	vector<vector<double>> s_tabulated;
+	vector<vector<double>> d_tabulated;
+	vector<vector<double>> sd_tabulated;
+
+	for (unsigned deg=1; deg<=3; ++deg) {
+			s_diff= differentiate(s_diff);
+			d_diff= differentiate(d_diff);
+			vector<double> s_values(n_intervals+1, .0);
+			vector<double> d_values(n_intervals+1, .0);
+			vector<double> sd_values(n_intervals+1, .0);
+			for (unsigned i=0; i<=n_intervals; ++i) {
+				const double t= i*delta_t;
+				s_values[i]=abs(evalQuintic(s_diff, t));
+				d_values[i]=abs(evalQuintic(d_diff, t));
+				sd_values[i]=sqrt(pow(s_values[i],2)+pow(d_values[i],2));
+			}
+			s_tabulated.push_back(std::move(s_values));
+			d_tabulated.push_back(std::move(d_values));
+			sd_tabulated.push_back(std::move(sd_values));
+	}
+	vector<double> s_max(3, .0);
+	vector<double> d_max(3, .0);
+	vector<double> sd_max(3, .0);
+
+	for (unsigned i=0; i<3; ++i) {
+		s_max[i]= *max_element(s_tabulated[i].begin(), s_tabulated[i].end());
+		d_max[i]= *max_element(begin(d_tabulated[i]), end(d_tabulated[i]));
+		sd_max[i]= *max_element(begin(sd_tabulated[i]), end(sd_tabulated[i]));
+	}
+
+	/*
+	if (sd_max[1]>=10 || sd_max[2] >=10 || sd_max[0]>=22.35)
+		return 1.;
+	else
+		return .0;*/
+	return sd_max[1]+sd_max[2];
+
+
 }
 
 pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
@@ -153,7 +190,7 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 	cout << "dJMT= " << dJMT.transpose() << endl << endl;
 
 	default_random_engine generator;
-	normal_distribution<double> distribution(s_goal[0], (s_goal[0] - s_start[0])/10);
+	normal_distribution<double> distribution(s_goal[0], (s_goal[0] - s_start[0])/5);
 
 	for (unsigned i=0; i< 9; ++i) {
 		const double s_variation= distribution(generator);
@@ -161,22 +198,33 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 		s_varied << s_variation, s_goal[1], s_goal[2];
 		s_goal_variations.push_back(s_varied);
 		auto sJMT_varied = computeJMT(s_start, s_varied, getPlanningTime());
-		auto dJMT_varied = computeJMT(d_start, d_goal, getPlanningTime());
+		// auto dJMT_varied = computeJMT(d_start, d_goal, getPlanningTime());
 		sJMT_variations.push_back(sJMT_varied);
-		dJMT_variations.push_back(dJMT_varied);
+		dJMT_variations.push_back(dJMT);
 	}
 
+	// Determine their costs
+	// Choose the JMT with minimum cost
+	double min_cost= numeric_limits<double>::max();
+	unsigned min_cost_i;
+
+	for (unsigned i=0; i<10; ++i) {
+		const double theCost=cost(sJMT_variations[i], dJMT_variations[i], getPlanningTime());
+		if (theCost < min_cost) {
+			min_cost= theCost;
+			min_cost_i= i;
+		}
+	}
+
+	cout << "Min cost JMT is # " << min_cost_i << " with cost= " << min_cost << endl;
+
 	// Update the boundary conditions to be used at the next iteration
-	last_s_boundary_conditions = s_goal;
+	last_s_boundary_conditions = s_goal_variations[min_cost_i];
 	if (last_s_boundary_conditions[0] >= ConfigParams::max_s)
 		last_s_boundary_conditions[0]-= ConfigParams::max_s;
 	last_d_boundary_conditions = d_goal;
 
-	// Determine their costs
-	// Choose the JMT with minimum cost
-
-	return {sJMT, dJMT};
-
+	return {sJMT_variations[min_cost_i], dJMT_variations[min_cost_i]};
 }
 
 pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
@@ -196,7 +244,7 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 	const double prec_car_s_est= preceding.s+prec_car_v*(time_to_trajectory_end + ConfigParams::planning_t_KL);  // TODO should I give it its own planning time?
 
 	// Determine wanted s coordinate for this car at the end of the next planning interval
-	const double wanted_s= prec_car_s_est - getSafeDistance(car.speed);
+	const double wanted_s= prec_car_s_est - ConfigParams::safe_distance;
 
 	// Check if it is possible to get to that s coordinate at that time without violating acceleration constraints
 	const double delta_s= wanted_s - s_start[0];
@@ -212,7 +260,7 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 		s_goal << s_with_max_a, min(v_with_max_a, ConfigParams::cruise_speed), a_sign*ConfigParams::max_accel_s;
 	}
 	else
-		s_goal << prec_car_s_est - getSafeDistance(car.speed), min(ConfigParams::cruise_speed,prec_car_v), 0;
+		s_goal << prec_car_s_est - ConfigParams::safe_distance, min(ConfigParams::cruise_speed,prec_car_v), 0;
 
 	// Don't allow to go backward!
 	if (s_goal[0] < s_start[0])

@@ -16,7 +16,10 @@ namespace ConfigParams {
 	// Desired cruise speed, that the behaviour planning shall try to attain and keep when possible
 	constexpr double cruise_speed = 21.0109;
 
-			// Maximum acceptable acceleration for the car, the car will try to reach it in order to get to target_sped in the shortest time
+	// Desired safe distance between the car and another car preceding in the same lane
+	constexpr double safe_distance= 2*cruise_speed;
+
+	// Maximum acceptable acceleration for the car, the car will try to reach it in order to get to target_sped in the shortest time
 	constexpr double max_accel_s = 6;
 
 	// Time interval between two consecutive waypoints, as implemented by the simulator
