@@ -14,6 +14,23 @@
 using namespace std;
 using namespace Eigen;
 
+
+double d_forLane(const unsigned lane) {
+	switch(lane) {
+	case 0:
+		return 2.1;
+	case 1:
+		return 6;
+	case 2:
+		return 9.8;  // Instead of 10, because of inaccuracies in Frenet/Cartesian conversion
+	default:
+		assert(0);
+	}
+
+	return 0;  // Unreachable
+
+}
+
 pair<double, double> findClosestInLane(Coordinates sd,  vector<CarSensorData> cars, unsigned lane, bool preceding, double lane_width ) {
 	int closest_i= -1;  // Will be the position in cars[] of the found vehicle (if found)
 	double closest_dist=  numeric_limits<double>::max();
@@ -96,7 +113,8 @@ FSM_State * FollowCar::getNextState(const Car & theCar, const std::vector<CarSen
 		double following_dist= following.second;
 
 		// If there is no following car, or the following car is at enough distance...
-		if (following_i <0 || following_dist >= ConfigParams::safe_distance/2) {
+		if (following_i <0 || following_dist >= ConfigParams::safe_distance/3
+				) {
 			// if there is no preceding car...
 			if (preceding_i < 0) {
 					// then mark the lane as the target for lane change
@@ -105,7 +123,9 @@ FSM_State * FollowCar::getNextState(const Car & theCar, const std::vector<CarSen
 					fastest_lane_empty= true;
 			}
 			// if instead there is a preceding car, but it is distant enought, and haven't found a better lane yet...
-			else  if (!fastest_lane_empty && preceding_dist>= ConfigParams::safe_distance && cars[preceding_i].getSpeed() > fastest_lane_speed) {
+			else  if (!fastest_lane_empty &&
+					preceding_dist>= ConfigParams::safe_distance*.8 &&
+					( cars[preceding_i].getSpeed() > fastest_lane_speed || preceding_dist > closest_dist*1.33)) {
 				//  then again mark the lane as target for change
 				fastest_lane= lane;
 				fastest_lane_speed= cars[preceding_i].getSpeed();
@@ -339,7 +359,7 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 
 	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
 	Vector3d d_goal;// Goal conditions for d
-	d_goal << ConfigParams::lane_width/2+car.getLane()*ConfigParams::lane_width, 0, 0;
+	d_goal << d_forLane(car.getLane()), 0, 0;
 	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
 	return { s_goal, d_goal };
@@ -385,7 +405,7 @@ pair<Vector3d, Vector3d> KeepLane::computeGoalBoundaryConditions() {
 
 	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
 	Vector3d d_goal;// Goal conditions for d
-	d_goal << ConfigParams::lane_width/2+car.getLane()*ConfigParams::lane_width, 0, 0;
+	d_goal << d_forLane(car.getLane()), 0, 0;
 	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
 	return { s_goal, d_goal };
@@ -402,7 +422,7 @@ FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSe
 	cars= theCars;
 
 	// Is the change of lane complete?
-	if (abs(car.d-(ConfigParams::lane_width/2+target_lane*ConfigParams::lane_width)) < .2)  { // TODO tune this
+	if (abs(car.d-d_forLane(target_lane)) < .2)  { // TODO tune this
 		auto pNextState= new KeepLane(car, cars);
 		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
 		return pNextState;
@@ -415,6 +435,7 @@ pair<Vector3d, Vector3d> ChangeLane::computeGoalBoundaryConditions() {  // TODO 
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
 
+	/*
 	double road_h = car.converter.getRoadHeading(car.s);  // TODO yuck!
 	double target_speed_s= ConfigParams::cruise_speed*cos(car.yaw- road_h);
 
@@ -430,11 +451,13 @@ pair<Vector3d, Vector3d> ChangeLane::computeGoalBoundaryConditions() {  // TODO 
 		double s2= (getPlanningTime() - tx) * target_speed_s;
 		s_goal << s1+s2, target_speed_s, 0;
 	}
+	*/
+	s_goal << s_start[0]+s_start[1]*getPlanningTime(), s_start[1], 0;
 	cout << "ChangeLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
 	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
 	Vector3d d_goal;// Goal conditions for d
-	d_goal << ConfigParams::lane_width/2+target_lane*ConfigParams::lane_width, 0, 0;
+	d_goal << d_forLane(target_lane), 0, 0;
 	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
 	// Update the boundary conditions to be used at the beginning of the next JMT

@@ -10,9 +10,8 @@ namespace ConfigParams {
 	static constexpr double lane_width= 4.;
 
 	// The planning time interval; when planning a path, it is planned to be worth these many seconds
-	// constexpr double planning_t_KL = 2.5;
-	constexpr double planning_t_KL = 2.3;
-	constexpr double planning_t_CL = 2.5;
+	constexpr double planning_t_KL = 1.8;
+	constexpr double planning_t_CL = 2.3;
 
 	// Desired cruise speed, that the behaviour planning shall try to attain and keep when possible
 	constexpr double cruise_speed = 21.0109;
