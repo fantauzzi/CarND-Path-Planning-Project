@@ -40,7 +40,7 @@ void FSM_State::initBoundaryConditions(Eigen::Vector3d s_init, Eigen::Vector3d d
 }
 
 KeepLane::KeepLane(const Car & car_init, const std::vector<CarSensorData> cars_init):
-		FSM_State(car_init, cars_init), target_speed(.0) {
+		FSM_State(car_init, cars_init) {
 }
 
 FollowCar::FollowCar(const Car & car_init, const std::vector<CarSensorData> cars_init):
@@ -68,6 +68,58 @@ FSM_State * FollowCar::getNextState(const Car & theCar, const std::vector<CarSen
 	}
 
 	// Otherwise evaluate whether to change lane
+
+	// Determine which lane(s) are candidate for a lane change, depending on the current lane
+	vector<unsigned> candidate_lanes;
+	if (car.getLane()==1)
+		candidate_lanes= {0, 2};
+	else
+		candidate_lanes= {1};
+
+	/* Go find the best lane to be, and store its number in fastest_lane
+	 *
+	 */
+
+	unsigned fastest_lane= car.getLane();  // Will be the best lane
+	// Will be the speed of the preceding vehicle in the best lane, or ConfigParams::cruise_speed if there is no preceding vehicle
+	double fastest_lane_speed= cars[closest_i].getSpeed();
+	bool fastest_lane_empty= false;  // Will be true if there is no car in front of my car in the best lane to be
+
+	// For every lane candidate for a lane change
+	for (auto lane: candidate_lanes) {
+		// Find the closest preceding and following car in that lane (if any)
+		auto preceding= findClosestInLane({car.s,  car.d}, cars, lane, true, ConfigParams::lane_width);
+		int preceding_i= preceding.first;
+		double preceding_dist= preceding.second;
+		auto following= findClosestInLane({car.s,  car.d}, cars, lane, false, ConfigParams::lane_width);
+		int following_i= following.first;
+		double following_dist= following.second;
+
+		// If there is no following car, or the following car is at enough distance...
+		if (following_i <0 || following_dist >= ConfigParams::safe_distance/2) {
+			// if there is no preceding car...
+			if (preceding_i < 0) {
+					// then mark the lane as the target for lane change
+					fastest_lane= lane;
+					fastest_lane_speed= ConfigParams::cruise_speed;
+					fastest_lane_empty= true;
+			}
+			// if instead there is a preceding car, but it is distant enought, and haven't found a better lane yet...
+			else  if (!fastest_lane_empty && preceding_dist>= ConfigParams::safe_distance && cars[preceding_i].getSpeed() > fastest_lane_speed) {
+				//  then again mark the lane as target for change
+				fastest_lane= lane;
+				fastest_lane_speed= cars[preceding_i].getSpeed();
+				fastest_lane_empty= false;
+			}
+		}
+	}
+
+	// If we have decided for a lane change, then instantiate its corresponding FSM state.
+	if (fastest_lane != car.getLane()) {
+		auto pNextState= new ChangeLane(car, cars, fastest_lane);  // TODO change to new class!
+		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
+		return pNextState;
+	}
 
 	return this;
 }
@@ -322,11 +374,11 @@ pair<Vector3d, Vector3d> KeepLane::computeGoalBoundaryConditions() {
 	int a_sign = (target_speed_s > s_start[1])? 1 : -1;
 	double proj_vel_s = s_start[1] + a_sign*ConfigParams::max_accel_s*ConfigParams::planning_t_KL;
 	if ((a_sign > 0 && proj_vel_s < target_speed_s) || (a_sign < 0 && proj_vel_s > target_speed_s))
-		s_goal << s_start[0]+s_start[1]*ConfigParams::planning_t_KL+.5*(a_sign)*ConfigParams::max_accel_s*pow(ConfigParams::planning_t_KL,2), proj_vel_s, a_sign*ConfigParams::max_accel_s;
+		s_goal << s_start[0]+s_start[1]*getPlanningTime()+.5*(a_sign)*ConfigParams::max_accel_s*pow(getPlanningTime(),2), proj_vel_s, a_sign*ConfigParams::max_accel_s;
 	else {
 		double tx= a_sign*(target_speed_s - s_start[1]) / ConfigParams::max_accel_s;
 		double s1= s_start[0] + s_start[1]*tx+.5*a_sign*ConfigParams::max_accel_s*pow(tx,2);
-		double s2= (ConfigParams::planning_t_KL - tx) * target_speed_s;
+		double s2= (getPlanningTime() - tx) * target_speed_s;
 		s_goal << s1+s2, target_speed_s, 0;
 	}
 	cout << "KeepLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
@@ -340,13 +392,9 @@ pair<Vector3d, Vector3d> KeepLane::computeGoalBoundaryConditions() {
 }
 
 
-ChangeLane::ChangeLane(
-		const Car & car_init,
-		const std::vector<CarSensorData> cars_init,
-		const unsigned target_lane_init,
-		const double target_speed_init):
-		FSM_State(car_init, cars_init), target_lane(target_lane_init), target_speed(target_speed_init) {
-	cout << "Instantiated ChangeLane with target_lane= "<< target_lane_init << " target_speed=" << target_speed_init << endl;
+ChangeLane::ChangeLane(const Car & car_init, const std::vector<CarSensorData> cars_init, const unsigned target_lane_init):
+		FSM_State(car_init, cars_init), target_lane(target_lane_init) {
+	cout << "Instantiated ChangeLane with target_lane= "<< target_lane_init << endl;
 }
 
 FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSensorData> theCars) {
@@ -368,16 +416,18 @@ pair<Vector3d, Vector3d> ChangeLane::computeGoalBoundaryConditions() {  // TODO 
 	Vector3d s_goal;// Goal conditions for s
 
 	double road_h = car.converter.getRoadHeading(car.s);  // TODO yuck!
-	double target_speed_s= target_speed*cos(car.yaw- road_h);
+	double target_speed_s= ConfigParams::cruise_speed*cos(car.yaw- road_h);
 
 	int a_sign = (target_speed_s > s_start[1])? 1 : -1;
 	double proj_vel_s = s_start[1] + a_sign*ConfigParams::max_accel_s*ConfigParams::planning_t_CL;
-	if ((a_sign > 0 && proj_vel_s < target_speed_s) || (a_sign < 0 && proj_vel_s > target_speed_s))
-		s_goal << s_start[0]+s_start[1]*ConfigParams::planning_t_CL+.5*(a_sign)*ConfigParams::max_accel_s*pow(ConfigParams::planning_t_CL,2), proj_vel_s, a_sign*ConfigParams::max_accel_s;
+	if ((a_sign > 0 && proj_vel_s < target_speed_s) || (a_sign < 0 && proj_vel_s > target_speed_s)) {
+		assert(proj_vel_s > 0);
+		s_goal << s_start[0]+s_start[1]*getPlanningTime()+.5*a_sign*ConfigParams::max_accel_s*pow(getPlanningTime(),2), proj_vel_s, a_sign*ConfigParams::max_accel_s;
+	}
 	else {
 		double tx= a_sign*(target_speed_s - s_start[1]) / ConfigParams::max_accel_s;
 		double s1= s_start[0] + s_start[1]*tx+.5*a_sign*ConfigParams::max_accel_s*pow(tx,2);
-		double s2= (ConfigParams::planning_t_CL - tx) * target_speed_s;
+		double s2= (getPlanningTime() - tx) * target_speed_s;
 		s_goal << s1+s2, target_speed_s, 0;
 	}
 	cout << "ChangeLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
@@ -393,12 +443,7 @@ pair<Vector3d, Vector3d> ChangeLane::computeGoalBoundaryConditions() {  // TODO 
 		last_s_boundary_conditions[0]-= ConfigParams::max_s;
 	last_d_boundary_conditions = d_goal;
 
-	// Compute the quintic polynomial coefficients, for the given boundary conditions and planning time interval
-	auto sJMT = computeJMT(s_start, s_goal, ConfigParams::planning_t_CL);
-	cout << "sJMT= " << sJMT.transpose() << endl << endl;
-	auto dJMT = computeJMT(d_start, d_goal, ConfigParams::planning_t_CL);
-	cout << "dJMT= " << dJMT.transpose() << endl << endl;
-	// return {sJMT, dJMT};
 	return {s_goal, d_goal};
 }
+
 
