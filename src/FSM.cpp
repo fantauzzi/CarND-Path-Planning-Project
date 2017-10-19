@@ -307,6 +307,36 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 		last_s_boundary_conditions[0]-= ConfigParams::max_s;
 	last_d_boundary_conditions = d_goal;
 
+	auto best_sJMT= sJMT_variations[min_cost_i];
+	auto best_dJMT= dJMT_variations[min_cost_i];
+
+	double sd_dist=0;
+	double xy_dist=0;
+	double prev_s= evalQuintic(best_sJMT, 0);
+	double prev_d= evalQuintic(best_dJMT, 0);
+	auto xy= car.converter.getXY(prev_s, prev_d);
+	double prev_x= xy.first;
+	double prev_y= xy.second;
+	for (double t=ConfigParams::tick/2; t<=getPlanningTime(); t+=ConfigParams::tick/2)
+	{
+		double s= evalQuintic(best_sJMT, t);
+		double d= evalQuintic(best_dJMT, t);
+		auto xy= car.converter.getXY(s, d);
+		double x= xy.first;
+		double y= xy.second;
+		sd_dist+=sqrt(pow(s-prev_s,2)+pow(d-prev_d,2));
+		xy_dist+=sqrt(pow(x-prev_x,2)+pow(y-prev_y,2));
+		prev_s=s;
+		prev_d=d;
+		prev_x=x;
+		prev_y=y;
+	}
+
+	double dist_ratio= sd_dist/xy_dist;
+	cout << "Distance ratio Frenet/Cartesian= " << dist_ratio << endl;
+
+	best_sJMT[0]*= dist_ratio;
+
 	return {sJMT_variations[min_cost_i], dJMT_variations[min_cost_i]};
 }
 

@@ -107,6 +107,10 @@ int main() {
 	vector<CarSensorData> cars;
 	unique_ptr<FSM_State> pState= make_unique<KeepLane>(car, cars);
 
+	double prev_car_speed=0;
+	double prev_s=0;
+	unsigned prev_wpoints_n;
+
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 			uWS::OpCode opCode) {
 		// "42" at the start of the message means there's a websocket message event.
@@ -170,6 +174,15 @@ int main() {
 						for (auto item: sensor_fusion)
 							if (abs(item[5]-car.s) <= sensor_range)
 								cars.push_back(CarSensorData(item, coord_conv));
+
+						double avg_speed=(car.speed+ prev_car_speed)/2;
+						double delta_t= (prev_wpoints_n - car.path_x.size())*ConfigParams::tick;
+						double avg_s_speed=(car.s-prev_s)/delta_t;
+						double speed_ratio= avg_speed/avg_s_speed;
+						// cout << "Speed ratio= " << speed_ratio << " delta-t=" << delta_t << endl;
+						prev_s= car.s;
+						prev_car_speed= car.speed;
+						prev_wpoints_n= car.path_x.size();
 
 						/* If state is KL:
 						 * - find closest vehicle preceding in same lane

@@ -10,11 +10,11 @@ namespace ConfigParams {
 	static constexpr double lane_width= 4.;
 
 	// The planning time interval; when planning a path, it is planned to be worth these many seconds
-	constexpr double planning_t_KL = 1.8;
-	constexpr double planning_t_CL = 2.3;
+	constexpr double planning_t_KL = 2.3;  // Used when in KeepLane and FollowCar states
+	constexpr double planning_t_CL = 1.8;  // Used when in ChangeLane state
 
 	// Desired cruise speed, that the behaviour planning shall try to attain and keep when possible
-	constexpr double cruise_speed = 21.0109;
+	constexpr double cruise_speed = 20.78736;  // 46.5 mph
 
 	// Speed limit
 	constexpr double speed_limit= 22.35;
@@ -29,7 +29,6 @@ namespace ConfigParams {
 	constexpr double tick = 0.02;
 
 	// When the planned trajectory yet to be run goes under this duration, extend it by planning a new trajectory
-	// constexpr double min_trajectory_duration = 0.5;
 	constexpr double min_trajectory_duration = 0.1;
 
 	// Simulated sensors range; vehicles that are reported by the simulator outside this range are ignored
