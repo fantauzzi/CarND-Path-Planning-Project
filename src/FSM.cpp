@@ -100,6 +100,10 @@ Vector6d differentiate (const Vector6d coeffs) {
 	return res;
 }
 
+double logistic(const double x) {
+	return 1/(1+exp(-x));
+}
+
 /**
  * Determines the cost of a trajectory between time 0 and a given time. The trajectory must be given
  * as two quintic polynomials s(t) and d(t).
@@ -112,51 +116,51 @@ double cost(
 		const Vector6d s_coeffs,
 		const Vector6d d_coeffs,
 		const double time_interval) {
-	// Determine max velocity, max acceleration, max jerk, overall lateral jerk and overall longitudinal jerk
-
-
+	// Will store the coefficients of subsequent derivatives of the trajectories
 	auto s_diff= s_coeffs;
 	auto d_diff= d_coeffs;
+
+	// A few shorthands
 	constexpr double delta_t=ConfigParams::tick;
 	const unsigned n_intervals= static_cast<unsigned>(round(time_interval/delta_t));
 
-	vector<vector<double>> s_tabulated;
-	vector<vector<double>> d_tabulated;
-	vector<vector<double>> sd_tabulated;
+	// Will hold information about trajectory variations
+	// vector<vector<double>> s_tabulated;
+	// vector<vector<double>> d_tabulated;
+	vector<vector<double>> sd_tabulated;  // the modulus of the vector (s, d)
+	vector<double> s_vel_tabulated; // the velocity of s (with sign)
 
 	for (unsigned deg=1; deg<=3; ++deg) {
 			s_diff= differentiate(s_diff);
 			d_diff= differentiate(d_diff);
-			vector<double> s_values(n_intervals+1, .0);
-			vector<double> d_values(n_intervals+1, .0);
 			vector<double> sd_values(n_intervals+1, .0);
+			vector<double> s_vel_values(n_intervals+1, .0);
 			for (unsigned i=0; i<=n_intervals; ++i) {
 				const double t= i*delta_t;
-				s_values[i]=abs(evalQuintic(s_diff, t));
-				d_values[i]=abs(evalQuintic(d_diff, t));
-				sd_values[i]=sqrt(pow(s_values[i],2)+pow(d_values[i],2));
+				const double s_value= abs(evalQuintic(s_diff, t));
+				const double d_value= abs(evalQuintic(d_diff, t));
+				sd_values[i]=sqrt(pow(s_value,2)+pow(d_value,2));
+				if (deg==1)
+					s_vel_values[i]= s_value;
 			}
-			s_tabulated.push_back(std::move(s_values));
-			d_tabulated.push_back(std::move(d_values));
 			sd_tabulated.push_back(std::move(sd_values));
+			if (deg==1)
+				s_vel_tabulated= std::move(s_vel_values);
 	}
-	vector<double> s_max(3, .0);
-	vector<double> d_max(3, .0);
 	vector<double> sd_max(3, .0);
 
 	for (unsigned i=0; i<3; ++i) {
-		s_max[i]= *max_element(s_tabulated[i].begin(), s_tabulated[i].end());
-		d_max[i]= *max_element(begin(d_tabulated[i]), end(d_tabulated[i]));
 		sd_max[i]= *max_element(begin(sd_tabulated[i]), end(sd_tabulated[i]));
 	}
 
-	/*
-	if (sd_max[1]>=10 || sd_max[2] >=10 || sd_max[0]>=22.35)
-		return 1.;
-	else
-		return .0;*/
-	const double speed_cost = (sd_max[0] > ConfigParams::speed_limit)? 20: 0;
-	return sd_max[1]+sd_max[2]+speed_cost;
+	const double s_vel_min= *min_element(begin(s_vel_tabulated), end(s_vel_tabulated));  // TODO could just stop when finding the first <0
+
+	const double acc_cost= logistic(sd_max[1]-6);
+	const double jerk_cost= logistic(sd_max[2]-6);
+	const double speed_cost = (sd_max[0] > ConfigParams::speed_limit)? 1: 0;
+	const double neg_s_vel_cost = (s_vel_min <=0)? 1: 0;
+
+	return ((acc_cost+jerk_cost+speed_cost)/3+neg_s_vel_cost)*100;
 
 }
 
@@ -195,7 +199,9 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 	cout << "sJMT= " << sJMT.transpose() << endl << endl;
 	cout << "dJMT= " << dJMT.transpose() << endl << endl;
 
-	normal_distribution<double> distribution(s_goal[0], (s_goal[0] - s_start[0])/4);
+	// normal_distribution<double> distribution(s_goal[0], (s_goal[0] - s_start[0])/20);  // TODO tune!
+	const double half_interval= (abs(s_goal[0] - s_start[0]))/5;
+	uniform_real_distribution<double> distribution(s_goal[0]-half_interval, s_goal[0]+half_interval);
 
 	for (unsigned i=0; i< ConfigParams::n_trajectories-1; ++i) {
 		const double s_variation= distribution(ConfigParams::rng);
@@ -265,7 +271,7 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 		s_goal << prec_car_s_est - ConfigParams::safe_distance, min(ConfigParams::cruise_speed,prec_car_v), 0;
 
 	// Don't allow to go backward!
-	if (s_goal[0] < s_start[0]) {
+	if (s_goal[0] < s_start[0]) {  // TODO this doesn't really work!
 		cout << "*** Got s goal before start: " <<s_goal[0] << " " << s_start[0] << endl;
 		s_goal << s_start[0], 0, 0;
 	}

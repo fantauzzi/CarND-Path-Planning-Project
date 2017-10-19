@@ -248,6 +248,10 @@ int main() {
 								next_x_vals.push_back(wpoint.first);
 								next_y_vals.push_back(wpoint.second);
 							}
+						auto current_t_end = std::chrono::high_resolution_clock::now();
+						std::chrono::duration<double> iter_time_span = std::chrono::duration_cast<std::chrono::duration<double>>(current_t_end - current_t);
+						cout << "Computation time(s): " << iter_time_span.count() << endl;
+
 						} // if (remaining_path_duration < min_trajectory_duration)
 
 						// Determine road heading, and use it to compute the s and d components of the car velocity
