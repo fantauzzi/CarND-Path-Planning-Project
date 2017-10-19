@@ -210,7 +210,7 @@ int main() {
 							}
 						} while(state_changed);
 						if (remaining_path_duration < min_trajectory_duration) {
-							cout << endl << "Iteration# " << iterations << endl;
+							cout << endl << "Iteration# " << iterations << " =========================================== " << endl;
 							cout << "s=" << car.s << " d=" << car.d << " yaw=" << rad2deg(car.yaw) << endl;
 							cout << "speed=" << car.speed << endl;
 
@@ -227,20 +227,22 @@ int main() {
 							vector<pair<double, double>> wpoints; // Will hold the sampled waypoints
 							vector<double> ss;
 							unsigned n_planning_wpoints=static_cast<int>(round(pState->getPlanningTime() / tick));
-							// double previous_s =-1;
+							double previous_s =-1;
+							bool going_backward= false;
 							for (unsigned i_wpoint=0; i_wpoint<n_planning_wpoints; ++i_wpoint) {
 								double wpoint_t= tick*(i_wpoint+1);
 								double next_s= evalQuintic(sJMT, wpoint_t);
 								ss.push_back(next_s);
-								// if (next_s < previous_s && !close_enough(next_s, previous_s))
-									// cout << "ERROR: backstep  next_s= " << next_s << "  previous_s= " << previous_s << endl;
-								// if (next_s < car.s && ! close_enough(next_s, car.s))
-									// cout << "ERROR: going backward  next_s= " << next_s << "  car.s= " << car.s << endl;
+								if (next_s < previous_s && !close_enough(next_s, previous_s))
+									going_backward= true;
+								previous_s= next_s;
 								double next_d= evalQuintic(dJMT, wpoint_t);
 								auto xy= coord_conv.getXY(next_s, next_d);
 								wpoints.push_back(xy);
 							}
 							assert(wpoints.size()==n_planning_wpoints);
+							if (going_backward)
+								cout << "**** Going backward!" << endl;
 
 							// Next add waypoints from the just computed JMT
 

@@ -67,7 +67,8 @@ FSM_State * FollowCar::getNextState(const Car & theCar, const std::vector<CarSen
 		return pNextState;
 	}
 
-	// Otherwise, just stay in the current state
+	// Otherwise evaluate whether to change lane
+
 	return this;
 }
 
@@ -160,7 +161,7 @@ double cost(
 	const double speed_cost = (sd_max[0] > ConfigParams::speed_limit)? 1: 0;
 	const double neg_s_vel_cost = (s_vel_min <=0)? 1: 0;
 
-	return ((acc_cost+jerk_cost+speed_cost)/3+neg_s_vel_cost)*100;
+	return ((acc_cost+jerk_cost)/2+5*speed_cost+10*neg_s_vel_cost)*100;
 
 }
 
@@ -182,7 +183,6 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 	if (abs(a_over_dist) > ConfigParams::max_accel_s)
 		cout << "***** Planned acc. over max: " << a_over_dist << endl;
 
-
 	// Compute the quintic polynomial (JMT) coefficients, for the given boundary conditions and planning time interval
 
 	// Generate additional random boundary conditions and the corresponding JMTs
@@ -200,7 +200,7 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 	cout << "dJMT= " << dJMT.transpose() << endl << endl;
 
 	// normal_distribution<double> distribution(s_goal[0], (s_goal[0] - s_start[0])/20);  // TODO tune!
-	const double half_interval= (abs(s_goal[0] - s_start[0]))/5;
+	const double half_interval= (abs(s_goal[0] - s_start[0]))/16;
 	uniform_real_distribution<double> distribution(s_goal[0]-half_interval, s_goal[0]+half_interval);
 
 	for (unsigned i=0; i< ConfigParams::n_trajectories-1; ++i) {
@@ -265,10 +265,10 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 		const double a_sign= (a_to_wanted_s > 0 && delta_s > 0)? 1: -1;
 		const double s_with_max_a= s_start[0]+s_start[1]*delta_t+.5*a_sign*ConfigParams::max_accel_s*pow(delta_t,2);
 		const double v_with_max_a= s_start[1]+a_sign*ConfigParams::max_accel_s*delta_t;
-		s_goal << s_with_max_a, min(v_with_max_a, ConfigParams::cruise_speed), a_sign*ConfigParams::max_accel_s;
+		s_goal << max(s_with_max_a, s_start[0]), max(min(v_with_max_a, ConfigParams::cruise_speed),.0), a_sign*ConfigParams::max_accel_s;
 	}
 	else
-		s_goal << prec_car_s_est - ConfigParams::safe_distance, min(ConfigParams::cruise_speed,prec_car_v), 0;
+		s_goal << prec_car_s_est - ConfigParams::safe_distance, max(min(ConfigParams::cruise_speed,prec_car_v),.0), 0;
 
 	// Don't allow to go backward!
 	if (s_goal[0] < s_start[0]) {  // TODO this doesn't really work!
@@ -278,6 +278,7 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 	// Check if it is possible to cover the trajectory distance without violating the speed limit
 	double avg_speed= (s_goal[0] - s_start[0]) / ConfigParams::planning_t_KL;
 	if (avg_speed > ConfigParams::cruise_speed) {
+		cout << "*** Average speed evaluated too high: " << avg_speed << endl;
 		// If not, then get s_goal[0] close enough to make it possible
 		s_goal[0]= s_start[0] + ConfigParams::cruise_speed*ConfigParams::planning_t_KL;
 		s_goal[1]= ConfigParams::cruise_speed;
