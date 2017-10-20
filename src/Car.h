@@ -58,7 +58,7 @@ struct CarSensorData {
 	 * @param other_s the s coordinate of the point from which to take the distance.
 	 * @return the computed distance with sign.
 	 */
-	double measureSeparationFrom(const double s) const;
+	// double measureSeparationFrom(const double s) const;
 };
 
 

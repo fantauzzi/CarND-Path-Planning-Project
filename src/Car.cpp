@@ -20,8 +20,10 @@ double measureSeparation(const double this_car_s, const double other_car_s) {
 	double sep= other_car_s -this_car_s;
 
 	// Handle the case where this car are the other car are on opposite side of the line s=0
-	if (sep < -ConfigParams::max_s/2 || sep > ConfigParams::max_s/2)
-		sep = ConfigParams::max_s-sep;
+	if (sep < -ConfigParams::max_s/2 )
+		sep = other_car_s+ConfigParams::max_s-this_car_s;
+	else if (sep > ConfigParams::max_s/2)
+		sep = this_car_s+ConfigParams::max_s-other_car_s;
 
 	return sep;
 }
@@ -75,7 +77,7 @@ Coordinates CarSensorData::predictFrenet(double dt) const {
 	return { s_pred, d_pred };
 }*/
 
-double CarSensorData::measureSeparationFrom(const double other_s) const {
+/* double CarSensorData::measureSeparationFrom(const double other_s) const {
 	double sep= other_s -s;
 
 	// Handle the case where this car are the other car are on opposite side of the line s=0
@@ -83,7 +85,7 @@ double CarSensorData::measureSeparationFrom(const double other_s) const {
 		sep = ConfigParams::max_s-sep;
 
 	return sep;
-}
+}*/
 
 Car::Car(const FrenetCartesianConverter & converter_ini): s(.0), d(.0), x(.0), y(.0), yaw(.0), speed(.0), converter(converter_ini) {
 

@@ -50,5 +50,5 @@ namespace ConfigParams {
 	/* Set the size of the interval from where the goal of trajectories is sampled, as
 	 * a fraction of the goal-start distance along the s coordinate.
 	 */
-	constexpr double sampling_interval= 1./6.;
+	constexpr double sampling_interval= 1./8.;
 }

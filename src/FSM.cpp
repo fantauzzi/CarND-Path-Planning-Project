@@ -42,8 +42,8 @@ pair<double, double> findClosestInLane(Coordinates sd,  vector<CarSensorData> ca
 	double closest_dist=  numeric_limits<double>::max();
 	int sign= (preceding)? 1: -1;
 	for (unsigned i=0; i<cars.size(); ++i)  {
-		double separation = -sign*cars[i].measureSeparationFrom(sd.first);
-		if (separation >=0 && separation < closest_dist && abs(cars[i].d-lane_width/2-lane_width*lane) < lane_width/2) {
+		double separation = -sign*measureSeparation(cars[i].s, sd.first);
+		if (separation >=0 && separation < closest_dist && abs(cars[i].d-lane_width/2-lane_width*lane) < lane_width/2) { // TODO improve lane calculation
 			closest_dist= separation;
 			closest_i=i;
 		}
@@ -119,12 +119,14 @@ double cost(
 
 	const double s_vel_min= *min_element(begin(s_vel_tabulated), end(s_vel_tabulated));
 
-	const double acc_cost= logistic(sd_max[1]-6);
-	const double jerk_cost= logistic(sd_max[2]-6);
-	const double speed_cost = (sd_max[0] > ConfigParams::speed_limit)? 1: 0;
-	const double neg_s_vel_cost = (s_vel_min <=0)? 1: 0;
+	const double acc_cost= logistic((sd_max[1]-9)*5)*100;
+	const double jerk_cost= logistic((sd_max[2]-9)*5)*100;
+	const double speed_cost = (sd_max[0] > ConfigParams::speed_limit*.98)? 500: 0;
+	const double neg_s_vel_cost = (s_vel_min <=0)? 1000: 0;
 
-	return ((acc_cost+jerk_cost)/2+5*speed_cost+10*neg_s_vel_cost)*100;
+	// cout << "Costs: acc=" << acc_cost << " jerk=" << jerk_cost << " speed=" << speed_cost << " neg vel=" << neg_s_vel_cost << endl;
+
+	return acc_cost+jerk_cost+speed_cost+neg_s_vel_cost;
 
 }
 
@@ -199,7 +201,7 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 
 	sJMT[0]*= dist_ratio;
 
-	const double half_interval= (abs(s_goal[0] - s_start[0]))/(2*ConfigParams::sampling_interval);
+	const double half_interval= (abs(s_goal[0] - s_start[0]))*(2*ConfigParams::sampling_interval);
 	uniform_real_distribution<double> distribution(s_goal[0]-half_interval, s_goal[0]+half_interval);
 
 	for (unsigned i=0; i< ConfigParams::n_trajectories-1; ++i) {
@@ -254,7 +256,7 @@ FSM_State * FollowCar::getNextState(const Car & theCar, const std::vector<CarSen
 	 * Set the next state to KeepLane also if no preceding car was found.
 	 */
 
-	if ((closest_i >= 0 && closest_dist >= ConfigParams::safe_distance*1.6) || closest_i < 0) {
+	if ((closest_i >= 0 && closest_dist >= ConfigParams::safe_distance*1.33) || closest_i < 0) {
 		auto pNextState= new KeepLane(car, cars);
 		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
 		return pNextState;
@@ -292,7 +294,7 @@ FSM_State * FollowCar::getNextState(const Car & theCar, const std::vector<CarSen
 
 		// If there is no following car, or the following car is at enough distance...
 		if (following_i <0 ||
-				(following_dist >= ConfigParams::overtaking_margin_following && abs(following_pred_dist) >=  ConfigParams::overtaking_margin_following)) {
+				(abs(following_dist) >= ConfigParams::overtaking_margin_following && abs(following_pred_dist) >=  ConfigParams::overtaking_margin_following)) {
 			// if there is no preceding car...
 			if (preceding_i < 0) {
 					// then mark the lane as the target for lane change
@@ -345,7 +347,7 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 
 	// Check if it is possible to get to that s coordinate at that time without violating acceleration constraints
 	const double delta_s= wanted_s - s_start[0];
-	const double delta_t= ConfigParams::planning_t_KL;
+	const double delta_t= getPlanningTime();
 	const double a_to_wanted_s= 2 / pow(delta_t,2) *(delta_s-s_start[1]*delta_t);
 	if (delta_s <=0 || abs(a_to_wanted_s) > ConfigParams::max_accel_s) {
 		const double a_sign= (a_to_wanted_s > 0 && delta_s > 0)? 1: -1;
@@ -354,7 +356,7 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 		s_goal << max(s_with_max_a, s_start[0]), max(min(v_with_max_a, ConfigParams::cruise_speed),.0), a_sign*ConfigParams::max_accel_s;
 	}
 	else
-		s_goal << prec_car_s_est - ConfigParams::safe_distance, max(min(ConfigParams::cruise_speed,prec_car_v),.0), 0;
+		s_goal << wanted_s, max(min(ConfigParams::cruise_speed,prec_car_v),.0), 0;
 
 	// Don't plan to go backward!
 	if (s_goal[0] < s_start[0]) {
