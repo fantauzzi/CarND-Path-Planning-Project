@@ -20,7 +20,7 @@ namespace ConfigParams {
 	constexpr double speed_limit= 22.35;
 
 	// Desired safe distance between the car and another car preceding in the same lane
-	constexpr double safe_distance= 2*cruise_speed;
+	constexpr double safe_distance= 2.5*cruise_speed;
 
 	// Maximum acceptable acceleration for the car, the car will try to reach it in order to get to target_sped in the shortest time
 	constexpr double max_accel_s = 5;

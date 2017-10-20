@@ -46,13 +46,6 @@ enum struct CarState {
 	KL, PLCL, PLCR, CLL, CLR
 };
 
-bool close_enough(const double a, const double b) {
-	constexpr double tollerance = 0.001;
-	if (abs(a - b) <= tollerance)
-		return true;
-	return false;
-}
-
 int main() {
 	uWS::Hub h;
 
@@ -106,10 +99,6 @@ int main() {
 	Car car(converter);  // TODO make Car a proper class, with a xtor: it cannot exist without a converter (see below)!
 	vector<CarSensorData> cars;
 	unique_ptr<FSM_State> pState= make_unique<KeepLane>(car, cars);
-
-	double prev_car_speed=0;
-	double prev_s=0;
-	unsigned prev_wpoints_n;
 
 	h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 			uWS::OpCode opCode) {
@@ -174,26 +163,6 @@ int main() {
 						for (auto item: sensor_fusion)
 							if (abs(item[5]-car.s) <= sensor_range)
 								cars.push_back(CarSensorData(item, coord_conv));
-
-						double avg_speed=(car.speed+ prev_car_speed)/2;
-						double delta_t= (prev_wpoints_n - car.path_x.size())*ConfigParams::tick;
-						double avg_s_speed=(car.s-prev_s)/delta_t;
-						double speed_ratio= avg_speed/avg_s_speed;
-						// cout << "Speed ratio= " << speed_ratio << " delta-t=" << delta_t << endl;
-						prev_s= car.s;
-						prev_car_speed= car.speed;
-						prev_wpoints_n= car.path_x.size();
-
-						/* If state is KL:
-						 * - find closest vehicle preceding in same lane
-						 * - if close enough, adjust target_speed to that vehicle speed
-						 * - if slower than me, look for possibility to change lane, i.e.:
-						 * - find closest vehicle preceding in adjacent lane;
-						 * - find closest vehicle following in the same adjacent lane;
-						 * - if two vehicles are out of the way, transition to CLL/CLR (if two lanes are available for change, choose
-						 *   the one without traffic, or else the one with the fastest traffic)
-						 * - if still in KL state, when necessary plan new trajectory to keep lane
-						 */
 
 						// Initialise last_boundary_conditions at the first iteration (beginning of the simulation)
 						if (!last_boundary_conditions_init) {

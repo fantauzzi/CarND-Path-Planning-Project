@@ -6,6 +6,8 @@
 #include "Car.h"
 #include "ConfigParams.h"
 
+bool close_enough(const double a, const double b);
+
 class FSM_State {
 protected:
 	Car car;

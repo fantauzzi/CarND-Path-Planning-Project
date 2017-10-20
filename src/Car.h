@@ -3,6 +3,8 @@
 #include <vector>
 #include "coordinatesHandling.h"
 
+double measureSeparation(const double this_car_s, const double other_car_s);
+
 struct CarSensorData {
 	unsigned id;
 	double x;

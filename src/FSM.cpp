@@ -14,6 +14,12 @@
 using namespace std;
 using namespace Eigen;
 
+bool close_enough(const double a, const double b) {
+	constexpr double tollerance = 0.001;
+	if (abs(a - b) <= tollerance)
+		return true;
+	return false;
+}
 
 double d_forLane(const unsigned lane) {
 	switch(lane) {
@@ -65,6 +71,12 @@ FollowCar::FollowCar(const Car & car_init, const std::vector<CarSensorData> cars
 }
 
 
+double predictDistance(const Car & this_car, const CarSensorData & other_car, const double delta_t) {
+	double sep= measureSeparation(this_car.s+this_car.speed*delta_t, other_car.s+other_car.getSpeed()*delta_t);
+	return sep;
+}
+
+
 FSM_State * FollowCar::getNextState(const Car & theCar, const std::vector<CarSensorData> theCars) {
 	car= theCar;
 	cars= theCars;
@@ -112,9 +124,11 @@ FSM_State * FollowCar::getNextState(const Car & theCar, const std::vector<CarSen
 		int following_i= following.first;
 		double following_dist= following.second;
 
+		double following_pred_dist= predictDistance(car, cars[following_i], car.path_x.size()*ConfigParams::tick+ConfigParams::planning_t_CL);  // TODO likely bug when wrap around, also code duplicate)
+
 		// If there is no following car, or the following car is at enough distance...
-		if (following_i <0 || following_dist >= ConfigParams::safe_distance/3
-				) {
+		if (following_i <0 || (following_dist >= ConfigParams::safe_distance/4 && abs(following_pred_dist) >=  ConfigParams::safe_distance/4// TODO move these safety margins to ConfigParams
+				)) {
 			// if there is no preceding car...
 			if (preceding_i < 0) {
 					// then mark the lane as the target for lane change
@@ -252,7 +266,7 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 
 	double dist= s_goal[0]-s_start[0];
 	double a_over_dist= 2/pow(getPlanningTime(),2)*(dist-s_start[1]*getPlanningTime());
-	if (abs(a_over_dist) > ConfigParams::max_accel_s)
+	if (abs(a_over_dist) > ConfigParams::max_accel_s and ! close_enough(abs(a_over_dist), ConfigParams::max_accel_s))
 		cout << "***** Planned acc. over max: " << a_over_dist << endl;
 
 	// Compute the quintic polynomial (JMT) coefficients, for the given boundary conditions and planning time interval
@@ -271,8 +285,35 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 	cout << "sJMT= " << sJMT.transpose() << endl << endl;
 	cout << "dJMT= " << dJMT.transpose() << endl << endl;
 
-	// normal_distribution<double> distribution(s_goal[0], (s_goal[0] - s_start[0])/20);  // TODO tune!
-	const double half_interval= (abs(s_goal[0] - s_start[0]))/16;
+	double sd_dist=0;
+	double xy_dist=0;
+	double prev_s= evalQuintic(sJMT, 0);
+	double prev_d= evalQuintic(dJMT, 0);
+	auto xy= car.converter.getXY(prev_s, prev_d);
+	double prev_x= xy.first;
+	double prev_y= xy.second;
+	for (double t=ConfigParams::tick/2; t<=getPlanningTime(); t+=ConfigParams::tick/2)
+	{
+		double s= evalQuintic(sJMT, t);
+		double d= evalQuintic(dJMT, t);
+		auto xy= car.converter.getXY(s, d);
+		double x= xy.first;
+		double y= xy.second;
+		sd_dist+=sqrt(pow(s-prev_s,2)+pow(d-prev_d,2));
+		xy_dist+=sqrt(pow(x-prev_x,2)+pow(y-prev_y,2));
+		prev_s=s;
+		prev_d=d;
+		prev_x=x;
+		prev_y=y;
+	}
+
+	double dist_ratio= sd_dist/xy_dist;
+	cout << "Distance ratio Frenet/Cartesian= " << dist_ratio << endl;
+
+	sJMT[0]*= dist_ratio;
+
+	// normal_distribution<double> distribution(s_goal[0], (s_goal[0] - s_start[0])/20);
+	const double half_interval= (abs(s_goal[0] - s_start[0]))/12;  // TODO tune!
 	uniform_real_distribution<double> distribution(s_goal[0]-half_interval, s_goal[0]+half_interval);
 
 	for (unsigned i=0; i< ConfigParams::n_trajectories-1; ++i) {
@@ -307,36 +348,6 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 		last_s_boundary_conditions[0]-= ConfigParams::max_s;
 	last_d_boundary_conditions = d_goal;
 
-	auto best_sJMT= sJMT_variations[min_cost_i];
-	auto best_dJMT= dJMT_variations[min_cost_i];
-
-	double sd_dist=0;
-	double xy_dist=0;
-	double prev_s= evalQuintic(best_sJMT, 0);
-	double prev_d= evalQuintic(best_dJMT, 0);
-	auto xy= car.converter.getXY(prev_s, prev_d);
-	double prev_x= xy.first;
-	double prev_y= xy.second;
-	for (double t=ConfigParams::tick/2; t<=getPlanningTime(); t+=ConfigParams::tick/2)
-	{
-		double s= evalQuintic(best_sJMT, t);
-		double d= evalQuintic(best_dJMT, t);
-		auto xy= car.converter.getXY(s, d);
-		double x= xy.first;
-		double y= xy.second;
-		sd_dist+=sqrt(pow(s-prev_s,2)+pow(d-prev_d,2));
-		xy_dist+=sqrt(pow(x-prev_x,2)+pow(y-prev_y,2));
-		prev_s=s;
-		prev_d=d;
-		prev_x=x;
-		prev_y=y;
-	}
-
-	double dist_ratio= sd_dist/xy_dist;
-	cout << "Distance ratio Frenet/Cartesian= " << dist_ratio << endl;
-
-	best_sJMT[0]*= dist_ratio;
-
 	return {sJMT_variations[min_cost_i], dJMT_variations[min_cost_i]};
 }
 
@@ -353,7 +364,7 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 
 	// Estimate s coordinate of the preceding car at the end of the next planning interval (trajectory), assuming constant speed
 	const double prec_car_v= sqrt(pow(preceding.vx,2)+pow(preceding.vy,2)); // TODO move it to a memeber function for CarSensorData
-	const double time_to_trajectory_end= car.path_x.size()*ConfigParams::tick;
+	const double time_to_trajectory_end= car.path_x.size()*ConfigParams::tick;  // TODO likely bug when wrap around, also code duplicate
 	const double prec_car_s_est= preceding.s+prec_car_v*(time_to_trajectory_end + ConfigParams::planning_t_KL);  // TODO should I give it its own planning time?
 
 	// Determine wanted s coordinate for this car at the end of the next planning interval
