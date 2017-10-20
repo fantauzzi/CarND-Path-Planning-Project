@@ -51,133 +51,10 @@ pair<double, double> findClosestInLane(Coordinates sd,  vector<CarSensorData> ca
 	return {closest_i, closest_dist };
 }
 
-
-FSM_State::FSM_State(const Car car_init, const std::vector<CarSensorData> cars_init):
-	car(car_init), cars(cars_init), boundary_conditions_initialised(false) {
-}
-
-void FSM_State::initBoundaryConditions(Eigen::Vector3d s_init, Eigen::Vector3d d_init) {
-	last_s_boundary_conditions= s_init;
-	last_d_boundary_conditions= d_init;
-	boundary_conditions_initialised= true;
-}
-
-KeepLane::KeepLane(const Car & car_init, const std::vector<CarSensorData> cars_init):
-		FSM_State(car_init, cars_init) {
-}
-
-FollowCar::FollowCar(const Car & car_init, const std::vector<CarSensorData> cars_init):
-		FSM_State(car_init, cars_init) {
-}
-
-
-double predictDistance(const Car & this_car, const CarSensorData & other_car, const double delta_t) {
+double predictSeparation(const Car & this_car, const CarSensorData & other_car, const double delta_t) {
 	double sep= measureSeparation(this_car.s+this_car.speed*delta_t, other_car.s+other_car.getSpeed()*delta_t);
 	return sep;
 }
-
-
-FSM_State * FollowCar::getNextState(const Car & theCar, const std::vector<CarSensorData> theCars) {
-	car= theCar;
-	cars= theCars;
-	// Find the closest vehicle in range preceding in the same lane (if any)
-	auto closest_info= findClosestInLane({car.s, car.d}, cars, car.getLane(), true, ConfigParams::lane_width);
-	int closest_i= closest_info.first;  // Will be the position in cars[] of the found vehicle (if found)
-	double closest_dist=  closest_info.second;
-
-	/* If the distance is at least the computed safe distance plus a margin, then set the next state to KeepLane;
-	 * the margin is introduced to prevent constant flipping between KeepLane and FollowCar.
-	 * Set the next state to KeepLane also if no preceding car was found.
-	 */
-
-	if ((closest_i >= 0 && closest_dist >= ConfigParams::safe_distance*1.6) || closest_i < 0) {
-		auto pNextState= new KeepLane(car, cars);
-		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
-		return pNextState;
-	}
-
-	// Otherwise evaluate whether to change lane
-
-	// Determine which lane(s) are candidate for a lane change, depending on the current lane
-	vector<unsigned> candidate_lanes;
-	if (car.getLane()==1)
-		candidate_lanes= {0, 2};
-	else
-		candidate_lanes= {1};
-
-	/* Go find the best lane to be, and store its number in fastest_lane
-	 *
-	 */
-
-	unsigned fastest_lane= car.getLane();  // Will be the best lane
-	// Will be the speed of the preceding vehicle in the best lane, or ConfigParams::cruise_speed if there is no preceding vehicle
-	double fastest_lane_speed= cars[closest_i].getSpeed();
-	bool fastest_lane_empty= false;  // Will be true if there is no car in front of my car in the best lane to be
-
-	// For every lane candidate for a lane change
-	for (auto lane: candidate_lanes) {
-		// Find the closest preceding and following car in that lane (if any)
-		auto preceding= findClosestInLane({car.s,  car.d}, cars, lane, true, ConfigParams::lane_width);
-		int preceding_i= preceding.first;
-		double preceding_dist= preceding.second;
-		auto following= findClosestInLane({car.s,  car.d}, cars, lane, false, ConfigParams::lane_width);
-		int following_i= following.first;
-		double following_dist= following.second;
-
-		double following_pred_dist= predictDistance(car, cars[following_i], car.path_x.size()*ConfigParams::tick+ConfigParams::planning_t_CL);  // TODO likely bug when wrap around, also code duplicate)
-
-		// If there is no following car, or the following car is at enough distance...
-		if (following_i <0 || (following_dist >= ConfigParams::safe_distance/4 && abs(following_pred_dist) >=  ConfigParams::safe_distance/4// TODO move these safety margins to ConfigParams
-				)) {
-			// if there is no preceding car...
-			if (preceding_i < 0) {
-					// then mark the lane as the target for lane change
-					fastest_lane= lane;
-					fastest_lane_speed= ConfigParams::cruise_speed;
-					fastest_lane_empty= true;
-			}
-			// if instead there is a preceding car, but it is distant enought, and haven't found a better lane yet...
-			else  if (!fastest_lane_empty &&
-					preceding_dist>= ConfigParams::safe_distance*.8 &&
-					( cars[preceding_i].getSpeed() > fastest_lane_speed || preceding_dist > closest_dist*1.33)) {
-				//  then again mark the lane as target for change
-				fastest_lane= lane;
-				fastest_lane_speed= cars[preceding_i].getSpeed();
-				fastest_lane_empty= false;
-			}
-		}
-	}
-
-	// If we have decided for a lane change, then instantiate its corresponding FSM state.
-	if (fastest_lane != car.getLane()) {
-		auto pNextState= new ChangeLane(car, cars, fastest_lane);  // TODO change to new class!
-		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
-		return pNextState;
-	}
-
-	return this;
-}
-
-
-FSM_State * KeepLane::getNextState(const Car & theCar, const std::vector<CarSensorData> theCars) {
-	car= theCar;
-	cars= theCars;
-	// Find the closest vehicle in range preceding in the same lane (if any)
-	auto closest_info= findClosestInLane({car.s, car.d}, cars, car.getLane(), true, ConfigParams::lane_width);
-	int closest_i= closest_info.first;  // Will be the position in cars[] of the found vehicle (if found)
-	double closest_dist=  closest_info.second;
-
-	// If the distance is below the computed safe distance, then set the next state to FollowCar
-	if (closest_i >= 0 && closest_dist < ConfigParams::safe_distance) {
-		auto pNextState= new FollowCar(car, cars);
-		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
-		return pNextState;
-	}
-
-	// Otherwise, just stay in the current state
-	return this;
-}
-
 
 Vector6d differentiate (const Vector6d coeffs) {
 	Vector6d res;
@@ -240,7 +117,7 @@ double cost(
 		sd_max[i]= *max_element(begin(sd_tabulated[i]), end(sd_tabulated[i]));
 	}
 
-	const double s_vel_min= *min_element(begin(s_vel_tabulated), end(s_vel_tabulated));  // TODO could just stop when finding the first <0
+	const double s_vel_min= *min_element(begin(s_vel_tabulated), end(s_vel_tabulated));
 
 	const double acc_cost= logistic(sd_max[1]-6);
 	const double jerk_cost= logistic(sd_max[2]-6);
@@ -249,6 +126,16 @@ double cost(
 
 	return ((acc_cost+jerk_cost)/2+5*speed_cost+10*neg_s_vel_cost)*100;
 
+}
+
+FSM_State::FSM_State(const Car car_init, const std::vector<CarSensorData> cars_init):
+	car(car_init), cars(cars_init), boundary_conditions_initialised(false) {
+}
+
+void FSM_State::initBoundaryConditions(Eigen::Vector3d s_init, Eigen::Vector3d d_init) {
+	last_s_boundary_conditions= s_init;
+	last_d_boundary_conditions= d_init;
+	boundary_conditions_initialised= true;
 }
 
 pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
@@ -312,8 +199,7 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 
 	sJMT[0]*= dist_ratio;
 
-	// normal_distribution<double> distribution(s_goal[0], (s_goal[0] - s_start[0])/20);
-	const double half_interval= (abs(s_goal[0] - s_start[0]))/12;  // TODO tune!
+	const double half_interval= (abs(s_goal[0] - s_start[0]))/(2*ConfigParams::sampling_interval);
 	uniform_real_distribution<double> distribution(s_goal[0]-half_interval, s_goal[0]+half_interval);
 
 	for (unsigned i=0; i< ConfigParams::n_trajectories-1; ++i) {
@@ -351,6 +237,91 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 	return {sJMT_variations[min_cost_i], dJMT_variations[min_cost_i]};
 }
 
+FollowCar::FollowCar(const Car & car_init, const std::vector<CarSensorData> cars_init):
+		FSM_State(car_init, cars_init) {
+}
+
+FSM_State * FollowCar::getNextState(const Car & theCar, const std::vector<CarSensorData> theCars) {
+	car= theCar;
+	cars= theCars;
+	// Find the closest vehicle in range preceding in the same lane (if any)
+	auto closest_info= findClosestInLane({car.s, car.d}, cars, car.getLane(), true, ConfigParams::lane_width);
+	int closest_i= closest_info.first;  // Will be the position in cars[] of the found vehicle (if found)
+	double closest_dist=  closest_info.second;
+
+	/* If the distance is at least the computed safe distance plus a margin, then set the next state to KeepLane;
+	 * the margin is introduced to prevent constant flipping between KeepLane and FollowCar.
+	 * Set the next state to KeepLane also if no preceding car was found.
+	 */
+
+	if ((closest_i >= 0 && closest_dist >= ConfigParams::safe_distance*1.6) || closest_i < 0) {
+		auto pNextState= new KeepLane(car, cars);
+		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
+		return pNextState;
+	}
+
+	// Otherwise evaluate whether to change lane
+
+	// Determine which lane(s) are candidate for a lane change, depending on the current lane
+	vector<unsigned> candidate_lanes;
+	if (car.getLane()==1)
+		candidate_lanes= {0, 2};
+	else
+		candidate_lanes= {1};
+
+	/* Go find the best lane to be, and store its number in fastest_lane
+	 *
+	 */
+
+	unsigned fastest_lane= car.getLane();  // Will be the best lane
+	// Will be the speed of the preceding vehicle in the best lane, or ConfigParams::cruise_speed if there is no preceding vehicle
+	double fastest_lane_speed= cars[closest_i].getSpeed();
+	bool fastest_lane_empty= false;  // Will be true if there is no car in front of my car in the best lane to be
+
+	// For every lane candidate for a lane change
+	for (auto lane: candidate_lanes) {
+		// Find the closest preceding and following car in that lane (if any)
+		auto preceding= findClosestInLane({car.s,  car.d}, cars, lane, true, ConfigParams::lane_width);
+		int preceding_i= preceding.first;
+		double preceding_dist= preceding.second;
+		auto following= findClosestInLane({car.s,  car.d}, cars, lane, false, ConfigParams::lane_width);
+		int following_i= following.first;
+		double following_dist= following.second;
+
+		double following_pred_dist= predictSeparation(car, cars[following_i], car.path_x.size()*ConfigParams::tick+ConfigParams::planning_t_CL);
+
+		// If there is no following car, or the following car is at enough distance...
+		if (following_i <0 ||
+				(following_dist >= ConfigParams::overtaking_margin_following && abs(following_pred_dist) >=  ConfigParams::overtaking_margin_following)) {
+			// if there is no preceding car...
+			if (preceding_i < 0) {
+					// then mark the lane as the target for lane change
+					fastest_lane= lane;
+					fastest_lane_speed= ConfigParams::cruise_speed;
+					fastest_lane_empty= true;
+			}
+			// if instead there is a preceding car, but it is distant enought, and haven't found a better lane yet...
+			else  if (!fastest_lane_empty &&
+					preceding_dist>= ConfigParams::overtaking_margin_preceding &&
+					( cars[preceding_i].getSpeed() > fastest_lane_speed || preceding_dist > closest_dist*1.33)) {
+				//  then again mark the lane as target for change
+				fastest_lane= lane;
+				fastest_lane_speed= cars[preceding_i].getSpeed();
+				fastest_lane_empty= false;
+			}
+		}
+	}
+
+	// If we have decided for a lane change, then instantiate its corresponding FSM state.
+	if (fastest_lane != car.getLane()) {
+		auto pNextState= new ChangeLane(car, cars, fastest_lane);
+		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
+		return pNextState;
+	}
+
+	return this;
+}
+
 pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 	assert(boundary_conditions_initialised);
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
@@ -363,12 +334,14 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 	const CarSensorData & preceding= cars[closest_i];
 
 	// Estimate s coordinate of the preceding car at the end of the next planning interval (trajectory), assuming constant speed
-	const double prec_car_v= sqrt(pow(preceding.vx,2)+pow(preceding.vy,2)); // TODO move it to a memeber function for CarSensorData
-	const double time_to_trajectory_end= car.path_x.size()*ConfigParams::tick;  // TODO likely bug when wrap around, also code duplicate
-	const double prec_car_s_est= preceding.s+prec_car_v*(time_to_trajectory_end + ConfigParams::planning_t_KL);  // TODO should I give it its own planning time?
+	const double prec_car_v= preceding.getSpeed();
+	const double time_to_trajectory_end= car.path_x.size()*ConfigParams::tick;
+	const double prec_car_s_est= preceding.s+prec_car_v*(time_to_trajectory_end + getPlanningTime());
 
 	// Determine wanted s coordinate for this car at the end of the next planning interval
-	const double wanted_s= prec_car_s_est - ConfigParams::safe_distance;
+	double wanted_s= prec_car_s_est - ConfigParams::safe_distance;
+	if (wanted_s < 0)
+		wanted_s+= ConfigParams::max_s;
 
 	// Check if it is possible to get to that s coordinate at that time without violating acceleration constraints
 	const double delta_s= wanted_s - s_start[0];
@@ -383,8 +356,8 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 	else
 		s_goal << prec_car_s_est - ConfigParams::safe_distance, max(min(ConfigParams::cruise_speed,prec_car_v),.0), 0;
 
-	// Don't allow to go backward!
-	if (s_goal[0] < s_start[0]) {  // TODO this doesn't really work!
+	// Don't plan to go backward!
+	if (s_goal[0] < s_start[0]) {
 		cout << "*** Got s goal before start: " <<s_goal[0] << " " << s_start[0] << endl;
 		s_goal << s_start[0], 0, 0;
 	}
@@ -406,31 +379,39 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 	return { s_goal, d_goal };
 }
 
+KeepLane::KeepLane(const Car & car_init, const std::vector<CarSensorData> cars_init):
+		FSM_State(car_init, cars_init) {
+}
+
+FSM_State * KeepLane::getNextState(const Car & theCar, const std::vector<CarSensorData> theCars) {
+	car= theCar;
+	cars= theCars;
+	// Find the closest vehicle in range preceding in the same lane (if any)
+	auto closest_info= findClosestInLane({car.s, car.d}, cars, car.getLane(), true, ConfigParams::lane_width);
+	int closest_i= closest_info.first;  // Will be the position in cars[] of the found vehicle (if found)
+	double closest_dist=  closest_info.second;
+
+	// If the distance is below the computed safe distance, then set the next state to FollowCar
+	if (closest_i >= 0 && closest_dist < ConfigParams::safe_distance) {
+		auto pNextState= new FollowCar(car, cars);
+		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
+		return pNextState;
+	}
+
+	// Otherwise, just stay in the current state
+	return this;
+}
+
+
 pair<Vector3d, Vector3d> KeepLane::computeGoalBoundaryConditions() {
 	assert(boundary_conditions_initialised);
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
 
-	/* Could it be in the base class?
-	 * - Compute possible s_goal and d_goal conditions based on kynematic equations, target lane and
-	 * planning time interval.
-	 * - Randomly perturb the found s_goal and d_goal to generate more candidate trajectories
-	 * - Select the trajectory with the lowest cost
-	 */
-
-	/*
-	 * How to compute possible s_goal and d_goal.
-	 * - Assume a linear trajectory from start to goal (its length will be a lower bound
-	 * for the actual trajectory length).
-	 * - With kynematic equations, determine how much distance the car will cover in the given
-	 * planning time.
-	 * - Determine the consequent goal_s and goal_d
-	 *
-	 */
-
 	// Determine the s component of the cruise speed at the car position
-	double road_h = car.converter.getRoadHeading(car.s);  // TODO yuck!
-	double target_speed_s= ConfigParams::cruise_speed*cos(car.yaw- road_h);
+	// double road_h = car.converter.getRoadHeading(car.s);  // TODO yuck!
+	// double target_speed_s= ConfigParams::cruise_speed*cos(car.yaw- road_h);
+	double target_speed_s= ConfigParams::cruise_speed;
 
 	int a_sign = (target_speed_s > s_start[1])? 1 : -1;
 	double proj_vel_s = s_start[1] + a_sign*ConfigParams::max_accel_s*ConfigParams::planning_t_KL;
@@ -463,7 +444,7 @@ FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSe
 	cars= theCars;
 
 	// Is the change of lane complete?
-	if (abs(car.d-d_forLane(target_lane)) < .2)  { // TODO tune this
+	if (abs(car.d-d_forLane(target_lane)) < .2)  {
 		auto pNextState= new KeepLane(car, cars);
 		pNextState->initBoundaryConditions(last_s_boundary_conditions, last_d_boundary_conditions);
 		return pNextState;
@@ -471,28 +452,10 @@ FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSe
 	return this;
 }
 
-pair<Vector3d, Vector3d> ChangeLane::computeGoalBoundaryConditions() {  // TODO name is incorrect, as method returns the polynomials, not the boundary conditions
-
+pair<Vector3d, Vector3d> ChangeLane::computeGoalBoundaryConditions() {
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
 
-	/*
-	double road_h = car.converter.getRoadHeading(car.s);  // TODO yuck!
-	double target_speed_s= ConfigParams::cruise_speed*cos(car.yaw- road_h);
-
-	int a_sign = (target_speed_s > s_start[1])? 1 : -1;
-	double proj_vel_s = s_start[1] + a_sign*ConfigParams::max_accel_s*ConfigParams::planning_t_CL;
-	if ((a_sign > 0 && proj_vel_s < target_speed_s) || (a_sign < 0 && proj_vel_s > target_speed_s)) {
-		assert(proj_vel_s > 0);
-		s_goal << s_start[0]+s_start[1]*getPlanningTime()+.5*a_sign*ConfigParams::max_accel_s*pow(getPlanningTime(),2), proj_vel_s, a_sign*ConfigParams::max_accel_s;
-	}
-	else {
-		double tx= a_sign*(target_speed_s - s_start[1]) / ConfigParams::max_accel_s;
-		double s1= s_start[0] + s_start[1]*tx+.5*a_sign*ConfigParams::max_accel_s*pow(tx,2);
-		double s2= (getPlanningTime() - tx) * target_speed_s;
-		s_goal << s1+s2, target_speed_s, 0;
-	}
-	*/
 	s_goal << s_start[0]+s_start[1]*getPlanningTime(), s_start[1], 0;
 	cout << "ChangeLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 

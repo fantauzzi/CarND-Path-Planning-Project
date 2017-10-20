@@ -29,7 +29,7 @@ struct CarSensorData {
 	 * Frenet reference system.
 	 * @return a pair whose two elements are respectively the velocity along s and along d.
 	 */
-	Coordinates getFrenetVelocity() const;
+	// Coordinates getFrenetVelocity() const;
 
 	/**
 	 * Compute and return the velocity value (modulus) in m/s of the car.
@@ -71,8 +71,9 @@ struct Car {
 	double speed;
 	std::vector<double> path_x;
 	std::vector<double> path_y;
-	Car(const FrenetCartesianConverter & converter);
 	FrenetCartesianConverter converter;
+
+	Car(const FrenetCartesianConverter & converter);
 	unsigned getLane() const;
-	Coordinates getFrenetVelocity() const;
+	// Coordinates getFrenetVelocity() const;
 };

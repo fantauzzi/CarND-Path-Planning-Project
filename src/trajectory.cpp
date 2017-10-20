@@ -40,19 +40,3 @@ double evalQuintic(const Vector6d coeffs, const double x) {
 	return result;
 }
 
-double measureQuinticArcLength(const Vector6d coeffs, const double x0, const double x1, const double step) {
-	assert(step>0);
-	assert(x1>=x0);
-	double length= .0;
-	double y0= evalQuintic(coeffs, x0);
-	for (double x= x0; x+step <= x1; x+= step) {
-		double y1= evalQuintic(coeffs, x+step);
-		double increment= sqrt(pow(y1-y0, 2)+pow(step,2));
-		length+= increment;
-		y0= y1;
-	}
-
-	assert(pow(length,2) >= pow(x1-x0,2) + pow(evalQuintic(coeffs, x1)-evalQuintic(coeffs, x0),2));
-	return length;
-
-}

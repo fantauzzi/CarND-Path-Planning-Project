@@ -8,6 +8,8 @@
 
 bool close_enough(const double a, const double b);
 
+std::pair<double, double> findClosestInLane(Coordinates sd,  std::vector<CarSensorData> cars, unsigned lane, bool preceding, double lane_width );
+
 class FSM_State {
 protected:
 	Car car;
@@ -26,7 +28,6 @@ public:
 };
 
 class KeepLane: public FSM_State {
-	// double target_speed;  // TODO do I need it as a data member?
 public:
 	KeepLane(const Car & car, const std::vector<CarSensorData> cars);
 	virtual FSM_State * getNextState(const Car & car, const std::vector<CarSensorData> cars) override;
@@ -38,7 +39,6 @@ public:
 };
 
 class FollowCar: public FSM_State {
-	double target_speed;  // TODO do I need it as a data member?
 public:
 	FollowCar(const Car & car, const std::vector<CarSensorData> cars);
 	virtual FSM_State * getNextState(const Car & car, const std::vector<CarSensorData> cars) override;
@@ -60,9 +60,6 @@ public:
 	}
 	virtual ~ChangeLane() {};
 };
-
-
-std::pair<double, double> findClosestInLane(Coordinates sd,  std::vector<CarSensorData> cars, unsigned lane, bool preceding, double lane_width );
 
 
 
