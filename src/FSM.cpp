@@ -340,11 +340,82 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 	const double time_to_trajectory_end= car.path_x.size()*ConfigParams::tick;
 	const double prec_car_s_est= preceding.s+prec_car_v*(time_to_trajectory_end + getPlanningTime());
 
-	// Determine wanted s coordinate for this car at the end of the next planning interval
-	double wanted_s= prec_car_s_est - ConfigParams::safe_distance;
-	if (wanted_s < 0)
-		wanted_s+= ConfigParams::max_s;
 
+
+	// Determine wanted s coordinate for this car at the end of the next planning interval
+
+	double s_p= prec_car_s_est - ConfigParams::safe_distance;  // s pursuit: the s coordinate of the spot I want to reach
+
+	if (s_p < 0)  // Adjust in case s_p is before s=0
+		s_p+= ConfigParams::max_s;
+	cout << "s_p= " << s_p << endl;
+
+	// If it is requested to go backward, then just decelerate as much as allowed
+	if (s_p <= s_start[0]) {
+		const double a_max= -ConfigParams::max_accel_s;
+		s_goal << s_start[0]+s_start[1]*getPlanningTime()+.5*a_max*pow(getPlanningTime(),2), max(s_start[1]+a_max*getPlanningTime(), 1.), a_max;
+		cout << "### Got s_p <=s_start[0] s_p=" << s_p << " s_start[0]=" << s_start[0] << endl;
+	}
+	else {
+		// Acceleration needed to reach s pursuit in getPlanningTime() seconds.
+		const double a_to_reach_s_p= 2/pow(getPlanningTime(),2)*(s_p-s_start[0]-s_start[1]*getPlanningTime());
+		cout << "a_to_reach_s_p= " << a_to_reach_s_p << endl;
+		// Can I afford that acceleration?
+		if (abs(a_to_reach_s_p) <= ConfigParams::max_accel_s) {
+			// If yes, then just do it!
+			s_goal << s_p, prec_car_v, 0;
+			cout << "### Can afford max acc a_to_reach_s_p="<< a_to_reach_s_p << endl;
+		}
+		else {
+			// If not, see how far I go with the highest (or lowest) acceleration I can afford, before hitting max speed or stopping
+			const double a_max= (a_to_reach_s_p > 0)? ConfigParams::max_accel_s : -ConfigParams::max_accel_s;
+			const double v_c= (a_max > 0)? ConfigParams::cruise_speed : .0;
+			const double s_c= s_start[0]+(pow(v_c,2)-pow(s_start[1],2))/(2*a_max);
+			// How much time to reach s_c?
+			const double t_c= (-s_start[1]+sqrt(pow(s_start[1],2)-2*(s_start[0]-s_c)*a_max))/a_max;
+			cout << "a_max=" << a_max << " v_c=" << v_c << " s_c=" << s_c << "t_c=" << t_c << endl;
+			if (t_c < 0)
+				cout << "*** t_c is negative! t_c=" << t_c << endl;
+			// Can I make it to s_c by the end of the planning time interval?
+			if (t_c >  getPlanningTime()) {
+				// If not, just keep accelerating until the end of the planning time interval
+				s_goal << s_start[0]+s_start[1]*getPlanningTime()+.5*a_max*pow(getPlanningTime(),2), s_start[1]+a_max*getPlanningTime(), a_max;
+				cout << "### Cannot make it to s_c t_c=" << t_c << " getPlanningTime()=" << getPlanningTime() << endl;
+			}
+			else {
+				// If yes, calculate until where I carry on proceeding at v_c speed after I reach s_c
+				const double s_final= s_c+v_c * (getPlanningTime()-t_c);
+				cout << "s_final=" << s_final << endl;
+				// Would I make it past s_p?
+				if (s_final >= s_p) {
+					// Then just plan to reach s_p
+					s_goal << s_p, prec_car_v, 0;
+					cout << "### Cannot reach s_p at v_c speed s_final=" << s_final << " s_p="<< s_p << endl;
+				}
+				else {
+					// Otherwise plan to go on at constant speed
+					s_goal << s_final, max(v_c, 1.), 0;
+					cout << "### Just continuing at constant speed s_final=" << s_final << " s_c=" << s_c << endl;
+				}
+			}
+		}
+	}
+
+	/*// s cruise: the s coordinate at which I would reach cruise speed by accelerating as much as allowed
+	const double s_c= s_start[0]+(pow(ConfigParams::cruise_speed,2)-pow(s_start[1],2))/(2*ConfigParams::max_accel_s);
+
+	// t cruise: the time to reach the cruise speed and also s cruise
+	const double t_c= (ConfigParams::cruise_speed-s_start[1])/ConfigParams::max_accel_s;
+
+	// t pursuit: the time to reach the wanted s coordinate (s pursuit) assuming max acceleration
+	const double t_p= (-s_start[1]+sqrt(pow(s_start[1],2)-4*(s_start[0]-s_p)*ConfigParams::max_accel_s/2))/ConfigParams::max_accel_s;
+
+	if (getPlanningTime() < t_p && getPlanningTime() < t_c)
+		s_goal << s_start[0]+s_start[1]*getPlanningTime()+.5*ConfigParams::max_accel_s*pow(getPlanningTime(),2);
+	 */
+
+
+	/*
 	// Check if it is possible to get to that s coordinate at that time without violating acceleration constraints
 	const double delta_s= wanted_s - s_start[0];
 	const double delta_t= getPlanningTime();
@@ -357,7 +428,9 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 	}
 	else
 		s_goal << wanted_s, max(min(ConfigParams::cruise_speed,prec_car_v),.0), 0;
+		*/
 
+	/*
 	// Don't plan to go backward!
 	if (s_goal[0] < s_start[0]) {
 		cout << "*** Got s goal before start: " <<s_goal[0] << " " << s_start[0] << endl;
@@ -371,6 +444,7 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 		s_goal[0]= s_start[0] + ConfigParams::cruise_speed*ConfigParams::planning_t_KL;
 		s_goal[1]= ConfigParams::cruise_speed;
 	}
+	*/
 	cout << "FollowCar s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
 	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
@@ -410,9 +484,6 @@ pair<Vector3d, Vector3d> KeepLane::computeGoalBoundaryConditions() {
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
 
-	// Determine the s component of the cruise speed at the car position
-	// double road_h = car.converter.getRoadHeading(car.s);  // TODO yuck!
-	// double target_speed_s= ConfigParams::cruise_speed*cos(car.yaw- road_h);
 	double target_speed_s= ConfigParams::cruise_speed;
 
 	int a_sign = (target_speed_s > s_start[1])? 1 : -1;
@@ -467,10 +538,10 @@ pair<Vector3d, Vector3d> ChangeLane::computeGoalBoundaryConditions() {
 	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
 	// Update the boundary conditions to be used at the beginning of the next JMT
-	last_s_boundary_conditions = s_goal;
+	/*last_s_boundary_conditions = s_goal;
 	if (last_s_boundary_conditions[0] >= ConfigParams::max_s)
 		last_s_boundary_conditions[0]-= ConfigParams::max_s;
-	last_d_boundary_conditions = d_goal;
+	last_d_boundary_conditions = d_goal; */
 
 	return {s_goal, d_goal};
 }
