@@ -151,6 +151,8 @@ int main() {
 						vector<double> car_path_y = std::move(j[1]["previous_path_y"]);
 						car.path_y= std::move(car_path_y);
 
+						cout << ">>> Remaining path length: " << car.path_x.size() << endl;
+
 						/* Previous path's end s and d values (corresponding to the last element in car.path_x[] and car.path_y[] .
 						 * Commented out because not used.
 						 */
@@ -237,11 +239,6 @@ int main() {
 						cout << "Computation time(s): " << iter_time_span.count() << endl;
 
 						} // if (remaining_path_duration < min_trajectory_duration)
-
-						// Determine road heading, and use it to compute the s and d components of the car velocity
-						/*double road_h = coord_conv.getRoadHeading(car.s);
-						double car_vel_s= car.speed*cos(car.yaw- road_h);
-						double car_vel_d= -car.speed*sin(car.yaw-road_h);// d=0 on the yellow center line, and increases toward the outer of the track*/
 
 						json msgJson;
 

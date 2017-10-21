@@ -60,9 +60,9 @@ the path has processed since last time.
 
 2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
 
-## Tips
+## Credits
 
-A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single hearder file is really easy to use.
+I have used the spline function provided [here](http://kluge.in-chemnitz.de/opensource/spline/) and [Eigen 3.3.4](http://eigen.tuxfamily.org/index.php?title=Main_Page). Source code for both are incuded in the present repository.
 
 ---
 
@@ -87,54 +87,32 @@ A really helpful resource for doing this project and creating smooth trajectorie
     git checkout e94b6e1
     ```
 
-## Editor Settings
+## Car Model Path and Generation
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
+When the simulation starts, I generate a path to follow and send it to the simulator. The first path originates from the car, that is initially stopped, and extends in front of it. The simulator drives the car along the path and sends me periodically information on the car state, what is reported by sensors, and what part of the path has yet to be run.
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
+When the car is close enough to the end of the planned path (0.2 seconds, with current settings), I generate a new path, starting from the end of the current path, and send it to the simulator.
 
-## Code Style
+The beginning of the simulation is the only time when I compute the path starting from the car position; after that, I compute a new path starting from the end of the current one or, in other words, I extend the current path.  
 
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
+A path is a trail of waypoints, that the car will gobble up at a rate of one waypoint every 0.02 seconds. Therefore, by setting the distance between waypoints, I also determine the car velocity.
 
-## Project Instructions and Rubric
+A Finite State Machine (FSM) encodes the car behavior. It has three possible states:
+- Keeping Lane (KL), when the car can attend its cruise speed, unhampered by other vehicles.
+- Following Car (FC), when the car is keeping distance from a preceding vehicle in the same lane.
+- Changing Lane (CL), when the car is moving from one lane to an adjacent one.
 
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
+At every iteration (i.e. update from the simulator), I determine if the car should remain in the current state, or switch to a different one, based on a set of rules. For instance, if the car is in FC (Following Car)), and a nearby lane has no traffic, or the traffic is faster, and there is a gap to merge in, then switch to CL (Change Lane) state.
 
+When it is time to compute a new path, extending the current one, I do it based on the current FSM state. I first determine where the path should end, say as forward as possible in the current lane (KL), as close as possible to a set distance from the preceding vehicle (FC), or forward and in an adjacent lane (CL). The exact position of the path end is based on a simple [kinematic model](https://www.khanacademy.org/science/physics/one-dimensional-motion/kinematic-formulas/a/what-are-the-kinematic-formulas) of the car, which is good enough for driving along the highway.
 
-## Call for IDE Profiles Pull Requests
+I then calculate a Jerk Minimising Trajectory (JMT), which is basically a quintic polynomial, going from the beginning of the new path (i.e. the end of the previous one), to its end. The JMT ensures that the car will be in a set position, velocity and acceleration at the end-points of the path, and also gives guarantees of continuity of the position and its first two derivatives. However, it does not give any other guarantee  (beside continuity) about velocity, acceleration and jerk *between* the endpoints.
 
-Help your fellow students!
+Given a JMT, the car might exceed along the path the speed limit, or any set limit on acceleration and jerk. They are imposed because of physical limitations, safety and comfort. 
 
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to ensure
-that students don't feel pressured to use one IDE or another.
+The way I addressed this is to generate a number of random JMTs in a neighbor of the one just computed, by perturbing its goal end-point by random amounts with uniform distribution. I then choose the best JMT based on a cost function. The cost considers the car velocity, acceleration and jerk at every waypoint along the trajectory.
 
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
+A limit of this approach is that, once committed to a path, it is not possible to change it to adapt to sudden new conditions. For instance, when another car cuts in front of the driven car without leaving enough distance, it is not possible to hit on the breaks right away; instead, I first need to reach the end of the current path.
 
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+Other possible improvements consist in smarter and more flexible behavior, for example changing speed to match traffic in an adjacent lane and facilitate lane change.
 

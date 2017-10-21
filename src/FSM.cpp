@@ -201,7 +201,7 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 
 	sJMT[0]*= dist_ratio;
 
-	const double half_interval= (abs(s_goal[0] - s_start[0]))*(2*ConfigParams::sampling_interval);
+	const double half_interval= .5*(abs(s_goal[0] - s_start[0]))*ConfigParams::sampling_interval;
 	uniform_real_distribution<double> distribution(s_goal[0]-half_interval, s_goal[0]+half_interval);
 
 	for (unsigned i=0; i< ConfigParams::n_trajectories-1; ++i) {
@@ -210,7 +210,6 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 		s_varied << s_variation, s_goal[1], s_goal[2];
 		s_goal_variations.push_back(s_varied);
 		auto sJMT_varied = computeJMT(s_start, s_varied, getPlanningTime());
-		// auto dJMT_varied = computeJMT(d_start, d_goal, getPlanningTime());
 		sJMT_variations.push_back(sJMT_varied);
 		dJMT_variations.push_back(dJMT);
 	}
@@ -487,20 +486,18 @@ FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSe
 pair<Vector3d, Vector3d> ChangeLane::computeGoalBoundaryConditions() {
 	Vector3d s_start = last_s_boundary_conditions;// Initial conditions for s
 	Vector3d s_goal;// Goal conditions for s
+	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
 
-	s_goal << s_start[0]+s_start[1]*getPlanningTime(), s_start[1], 0;
+	const double hypotenuse = s_start[1]*getPlanningTime();
+	const double cat= abs(d_forLane(target_lane)-d_start[0]);
+	const double s_to_travel= sqrt(pow(hypotenuse,2) - pow(cat, 2));
+
+	s_goal << s_start[0]+s_to_travel, s_start[1], 0;
 	cout << "ChangeLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
-	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
 	Vector3d d_goal;// Goal conditions for d
 	d_goal << d_forLane(target_lane), 0, 0;
 	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
-
-	// Update the boundary conditions to be used at the beginning of the next JMT
-	/*last_s_boundary_conditions = s_goal;
-	if (last_s_boundary_conditions[0] >= ConfigParams::max_s)
-		last_s_boundary_conditions[0]-= ConfigParams::max_s;
-	last_d_boundary_conditions = d_goal; */
 
 	return {s_goal, d_goal};
 }

@@ -17,10 +17,10 @@ namespace ConfigParams {
 	constexpr double cruise_speed = 20.78736;  // 46.5 mph
 
 	// Speed limit
-	constexpr double speed_limit= 22.35;
+	constexpr double speed_limit= 22.35;  // 50 mph
 
 	// Desired safe distance between the car and another car preceding in the same lane
-	constexpr double safe_distance= 2*cruise_speed;
+	constexpr double safe_distance= 2.2*cruise_speed;
 
 	// Desired safe distance from following/preceding vehicle in another lane, before starting lane change
 	constexpr double overtaking_margin_following= ConfigParams::safe_distance/3;
@@ -50,5 +50,5 @@ namespace ConfigParams {
 	/* Set the size of the interval from where the goal of trajectories is sampled, as
 	 * a fraction of the goal-start distance along the s coordinate.
 	 */
-	constexpr double sampling_interval= 1./8.;
+	constexpr double sampling_interval= 1./3.;
 }
