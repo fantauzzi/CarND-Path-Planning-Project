@@ -33,7 +33,7 @@ namespace ConfigParams {
 	constexpr double tick = 0.02;
 
 	// When the planned trajectory yet to be run goes under this duration, extend it by planning a new trajectory
-	constexpr double min_trajectory_duration = 0.1;
+	constexpr double min_trajectory_duration = 0.2;
 
 	// Simulated sensors range; vehicles that are reported by the simulator outside this range are ignored
 	constexpr double sensor_range= 300;

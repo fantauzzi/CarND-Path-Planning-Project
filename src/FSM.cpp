@@ -371,9 +371,12 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 			const double a_max= (a_to_reach_s_p > 0)? ConfigParams::max_accel_s : -ConfigParams::max_accel_s;
 			const double v_c= (a_max > 0)? ConfigParams::cruise_speed : .0;
 			const double s_c= s_start[0]+(pow(v_c,2)-pow(s_start[1],2))/(2*a_max);
+			const double det= max(pow(s_start[1],2)-2*(s_start[0]-s_c)*a_max, .0);
 			// How much time to reach s_c?
-			const double t_c= (-s_start[1]+sqrt(pow(s_start[1],2)-2*(s_start[0]-s_c)*a_max))/a_max;
-			cout << "a_max=" << a_max << " v_c=" << v_c << " s_c=" << s_c << "t_c=" << t_c << endl;
+			cout << "det= " << det << " pow(s_start[1],2)=" << pow(s_start[1],2) << " 2*(s_start[0]-s_c)*a_max=" << 2*(s_start[0]-s_c)*a_max;
+			cout << " s_start[1]" << s_start[1] << " s_start[0]" << s_start[0] << endl;
+			const double t_c= (-s_start[1]+sqrt(det))/a_max;
+			cout << "a_max=" << a_max << " v_c=" << v_c << " s_c=" << s_c << " t_c=" << t_c << endl;
 			if (t_c < 0)
 				cout << "*** t_c is negative! t_c=" << t_c << endl;
 			// Can I make it to s_c by the end of the planning time interval?
@@ -401,50 +404,6 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 		}
 	}
 
-	/*// s cruise: the s coordinate at which I would reach cruise speed by accelerating as much as allowed
-	const double s_c= s_start[0]+(pow(ConfigParams::cruise_speed,2)-pow(s_start[1],2))/(2*ConfigParams::max_accel_s);
-
-	// t cruise: the time to reach the cruise speed and also s cruise
-	const double t_c= (ConfigParams::cruise_speed-s_start[1])/ConfigParams::max_accel_s;
-
-	// t pursuit: the time to reach the wanted s coordinate (s pursuit) assuming max acceleration
-	const double t_p= (-s_start[1]+sqrt(pow(s_start[1],2)-4*(s_start[0]-s_p)*ConfigParams::max_accel_s/2))/ConfigParams::max_accel_s;
-
-	if (getPlanningTime() < t_p && getPlanningTime() < t_c)
-		s_goal << s_start[0]+s_start[1]*getPlanningTime()+.5*ConfigParams::max_accel_s*pow(getPlanningTime(),2);
-	 */
-
-
-	/*
-	// Check if it is possible to get to that s coordinate at that time without violating acceleration constraints
-	const double delta_s= wanted_s - s_start[0];
-	const double delta_t= getPlanningTime();
-	const double a_to_wanted_s= 2 / pow(delta_t,2) *(delta_s-s_start[1]*delta_t);
-	if (delta_s <=0 || abs(a_to_wanted_s) > ConfigParams::max_accel_s) {
-		const double a_sign= (a_to_wanted_s > 0 && delta_s > 0)? 1: -1;
-		const double s_with_max_a= s_start[0]+s_start[1]*delta_t+.5*a_sign*ConfigParams::max_accel_s*pow(delta_t,2);
-		const double v_with_max_a= s_start[1]+a_sign*ConfigParams::max_accel_s*delta_t;
-		s_goal << max(s_with_max_a, s_start[0]), max(min(v_with_max_a, ConfigParams::cruise_speed),.0), a_sign*ConfigParams::max_accel_s;
-	}
-	else
-		s_goal << wanted_s, max(min(ConfigParams::cruise_speed,prec_car_v),.0), 0;
-		*/
-
-	/*
-	// Don't plan to go backward!
-	if (s_goal[0] < s_start[0]) {
-		cout << "*** Got s goal before start: " <<s_goal[0] << " " << s_start[0] << endl;
-		s_goal << s_start[0], 0, 0;
-	}
-	// Check if it is possible to cover the trajectory distance without violating the speed limit
-	double avg_speed= (s_goal[0] - s_start[0]) / ConfigParams::planning_t_KL;
-	if (avg_speed > ConfigParams::cruise_speed) {
-		cout << "*** Average speed evaluated too high: " << avg_speed << endl;
-		// If not, then get s_goal[0] close enough to make it possible
-		s_goal[0]= s_start[0] + ConfigParams::cruise_speed*ConfigParams::planning_t_KL;
-		s_goal[1]= ConfigParams::cruise_speed;
-	}
-	*/
 	cout << "FollowCar s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
 	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
