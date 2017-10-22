@@ -128,7 +128,7 @@ int main() {
 						vector<double> car_path_y = std::move(j[1]["previous_path_y"]);
 						car.path_y= std::move(car_path_y);
 
-						cout << ">>> Remaining path length: " << car.path_x.size() << endl;
+						// cout << ">>> Remaining path length: " << car.path_x.size() << endl;
 
 						/* Previous path's end s and d values (corresponding to the last element in car.path_x[] and car.path_y[] .
 						 * Commented out because not used.
