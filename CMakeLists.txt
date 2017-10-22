@@ -2,10 +2,7 @@ project(Path_Planning)
 
 cmake_minimum_required (VERSION 3.5)
 
-add_definitions(-std=c++1y)
-
-set(CXX_FLAGS "-Wall" "-O3" "-c" "-fmessage-length=0")
-set(CMAKE_CXX_FLAGS, "${CXX_FLAGS}")
+add_definitions(-std=c++1y -O3 -Wall)
 
 set(sources src/main.cpp src/Car.cpp src/coordinatesHandling.cpp src/FSM.cpp src/spline.cpp src/trajectory.cpp)
 
