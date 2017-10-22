@@ -53,7 +53,7 @@ I have used the spline function provided [here](http://kluge.in-chemnitz.de/open
 
 ## Path Generation and Car Model
 
-When the simulation starts, I generate a path to follow and send it to the simulator. The first path originates from the car, that is initially stopped, and extends in front of it. The simulator drives the car along the path and sends me periodically information on the car state, what is reported by sensors, and what part of the path has yet to be run.
+When the simulation starts, I generate a path to follow and send it to the simulator. The first path originates from the car, initially stopped, and extends in front of it. The simulator drives the car along the path and sends periodically to my program information on the car state, what is reported by sensors, and what part of the path has yet to be run.
 
 When the car is close enough to the end of the planned path (0.2 seconds, with current settings), I generate a new path, starting from the end of the current path, and send it to the simulator.
 
@@ -74,17 +74,17 @@ Note that the state may switch multiple times in a row, during the iteration. E.
 
 When it is time to compute a new path, extending the current one, I do it based on the current FSM state. I first determine where the path should end, say as forward as possible in the current lane (KL), as close as possible to a set distance from the preceding vehicle (FV), or forward and in an adjacent lane (CL). The exact position of the path end is based on a simple [kinematic model](https://www.khanacademy.org/science/physics/one-dimensional-motion/kinematic-formulas/a/what-are-the-kinematic-formulas) of the car, which is good enough for driving along the highway.
 
-I then calculate a Jerk Minimising Trajectory (JMT), which is basically a quintic polynomial, going from the beginning of the new path (i.e. the end of the previous one), to its end. The JMT ensures that the car will be in a set position, velocity and acceleration at the end-points of the path, and also gives guarantees of continuity of the position and its first two derivatives. However, it does not give any other guarantee  (beside continuity) about velocity, acceleration and jerk *between* the endpoints.
+I then calculate a Jerk Minimising Trajectory (JMT), which is a quintic polynomial, going from the beginning of the new path (i.e. the end of the previous one), to its end. The JMT ensures that the car will be in a set position, velocity and acceleration at the end-points of the path; it guarantees continuity of the position and its first two derivatives and also minimises jerk along the trajectory. However, it does not give any other guarantee about velocity, acceleration and jerk *between* the endpoints.
 
 Given a JMT, the car might exceed along the path the speed limit, or any set limit on acceleration and jerk. They are imposed because of physical limitations, safety and comfort. 
 
 The way I addressed this is to generate a number of random JMTs in a neighbor of the one just computed, by perturbing its goal end-point by random amounts with uniform distribution. I then choose the best JMT based on a cost function. The cost considers the car velocity, acceleration and jerk at every waypoint along the trajectory.
 
-Note that all trajectories calculations are done in a Frenet reference system, as it is much simpler than in Cartesian coordinates. The generated path waypoints are then converted into Cartesian coordinates, as expected by the simulator.
+All trajectory calculations are done in a Frenet reference system, as they are much easier than in Cartesian coordinates. The generated path waypoints are then converted into Cartesian coordinates, as expected by the simulator.
 
 A limit of this approach is that, once committed to a path, it is not possible to change it to adapt to sudden new conditions. For instance, when another car cuts in front of the driven car without leaving enough distance, it is not possible to hit on the breaks right away; instead, I first need to reach the end of the current path.
 
-Other possible improvements consist in smarter and more flexible behavior, for example changing speed to match traffic in an adjacent lane and facilitate lane change, and allowing to go across two lanes at a time.
+Another possible improvement consists in smarter and more flexible behavior, for example changing speed to match traffic in an adjacent lane and facilitate lane change, and allowing to go across two lanes at a time to change lane.
 
 ## Requirements
 
@@ -96,11 +96,11 @@ Code can be compiled following instructions provided above.
 
 ### The car is able to drive at least 4.32 miles without incident.
 
-I have made available a video where the car drives for more than 4.32 miles without accidents. The simulator reports on-screen the distance driven without accidents.
+The simulator reports on-screen the distance driven without accidents, which allows to verify compliance with the requirement by running the simulation.
 
 ### The car drives according to the speed limit.
 
-The car tries to keep a cruise speed of 45.6 mph (against a speed limit of 50 mph), as configured by parameter `cruise_speed` in file `ConfigParams.cpp`. Also, the cost function used to evaluate generated trajectories penalises trajectories that, at any intermediate point, reach or exceed 50 mph; see parameter `speed_limit` in `ConfigParams.cpp`.
+The car tries to keep a cruise speed of 45 mph (against a speed limit of 50 mph), as configured by parameter `cruise_speed` in file `ConfigParams.h`. Also, the cost function used to evaluate generated trajectories penalises trajectories that, at any intermediate point, reach or exceed 50 mph; see parameter `speed_limit` in `ConfigParams.h`.
 
 Implementation of the cost function is in `cost()` in file `FSM.cpp`. In the same file, `FSM_State::generateTrajectory()` calls `cost()` to evaluate generated trajectories. That member function also tries to adjust for mismatches between distances (and therefore, velocities) measured in Frenet and measured in Cartesian coordinates. While the two match where the road is straight, on the outer lane of bends the distance between two points along the lane is significantly shorter when measured in Frenet as opposed to Cartesian coordinates.   
 
@@ -111,7 +111,7 @@ Member functions `computeGoalBoundaryConditions()` of classes `KeepLane`, `Follo
 Member function `FSM_State::generateTrajectory()` samples randomly generated trajectories from the given boundary conditions and evaluate them with the cost function, in order to find the trajectory with the preferable acceleration and jerk throughout.    
 ### Car does not have collisions.
 
-Member function `computeGoalBoundaryConditions()` of class `FollowCar` tries to keep a set distance from the preceding car, configured by parameter `safe_distance` in file `ConfigParams.cpp`. It does so by applying kinematic equations to the motion of the car, and to predict the motion of the preceding car.
+Member function `computeGoalBoundaryConditions()` of class `FollowCar` tries to keep a set distance from the preceding car, configured by parameter `safe_distance` in file `ConfigParams.h`. It does so by applying kinematic equations to the motion of the car, and to the prediction of the preceding car motion.
 
 In the same class, member function `getNextState()` verifies that there is enough space in an adjacent lane before switching state to CL, and therefore before initiating a lane change. To do so, it considers the closest car (if any) preceding and following on that lane, and predicting their positions at the beginning and end of the maneuver.  
 
@@ -119,7 +119,7 @@ In the same class, member function `getNextState()` verifies that there is enoug
 
 Boundary conditions of the trajectories are set in such a way that the car tries to keep a constant `d` coordinate, and therefore the same lane, except when directed to change lane. 
 
-Member function `computeGoalBoundaryConditions()` of class `ChangeLane` sets boundary conditions in such a way that lane change is completed in no more than 1.8 seconds, as configured by parameter `planning_t_CL` in `ConfigParams.cpp`.
+Member function `computeGoalBoundaryConditions()` of class `ChangeLane` sets boundary conditions in such a way that lane change is completed in no more than 1.8 seconds, as configured by parameter `planning_t_CL` in `ConfigParams.h`.
 
 ### The car is able to change lanes
 
@@ -133,7 +133,7 @@ In order to begin lane change to a given lane, the following conditions must be 
 
 - the following car in the given lane (if any) must be far enough, and also its predicted position at the end of the maneuver must be far enough, to change lane without risking a collision.  
 
-The rules above are coded in 'FollowCar::getNextState()'.
+The rules above are coded in `FollowCar::getNextState()`.
 
 ### There is a reflection on how to generate paths.
 
