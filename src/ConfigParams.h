@@ -42,7 +42,7 @@ namespace ConfigParams {
 	constexpr double max_s = 6945.554;
 
 	// Number of trajectory variations from where to sample the next trajectory
-	constexpr unsigned n_trajectories= 50;
+	constexpr unsigned n_trajectories= 100;
 
 	// The random number generator
 	static std::default_random_engine rng;
@@ -50,5 +50,5 @@ namespace ConfigParams {
 	/* Set the size of the interval from where the goal of trajectories is sampled, as
 	 * a fraction of the goal-start distance along the s coordinate.
 	 */
-	constexpr double sampling_interval= 1./3.;
+	constexpr double sampling_interval= 1.45;
 }

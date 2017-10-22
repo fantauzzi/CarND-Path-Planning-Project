@@ -245,13 +245,21 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 		}
 	}
 
-	cout << "Min cost JMT is # " << min_cost_i << " with cost= " << min_cost << endl;
+	cout << "Min cost JMT is # " << min_cost_i << " with cost= " << min_cost;
+	cout << " Default cost was=" << cost(sJMT_variations[0], dJMT_variations[0], getPlanningTime()) << endl;
 
 	// Update the boundary conditions to be used at the next iteration
 	last_s_boundary_conditions = s_goal_variations[min_cost_i];
 	if (last_s_boundary_conditions[0] >= ConfigParams::max_s)
 		last_s_boundary_conditions[0]-= ConfigParams::max_s;
 	last_d_boundary_conditions = d_goal;
+
+	cout << "Final boundary conditions, s and d goal:" << endl;
+	cout << s_goal_variations[min_cost_i].transpose() << endl;
+	cout << d_goal.transpose() << endl;
+	cout << "Final JMTs, s and d:" << endl;
+	cout << sJMT_variations[min_cost_i].transpose() << endl;
+	cout << dJMT_variations[min_cost_i].transpose() << endl;
 
 	return {sJMT_variations[min_cost_i], dJMT_variations[min_cost_i]};
 }
