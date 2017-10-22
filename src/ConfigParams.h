@@ -23,7 +23,7 @@ namespace ConfigParams {
 	constexpr double safe_distance= 2.2*cruise_speed;
 
 	// Desired safe distance from following/preceding vehicle in another lane, before starting lane change
-	constexpr double overtaking_margin_following= ConfigParams::safe_distance/3;
+	constexpr double overtaking_margin_following= ConfigParams::safe_distance/2;
 	constexpr double overtaking_margin_preceding= ConfigParams::safe_distance*.8;
 
 	// Maximum acceptable acceleration for the car, the car will try to reach it in order to get to target_sped in the shortest time
