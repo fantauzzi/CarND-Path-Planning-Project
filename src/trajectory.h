@@ -1,5 +1,5 @@
 #pragma once
-#include "Eigen/Core"
+#include "Eigen-3-3-4/Eigen/Core"
 
 /* Convenient alias for a type, will hold the 6 coefficients of a quintic function, sorted
  * from the degree 0 coefficient to the degree 5: a0+a1*x+a2*x^2+a3*x^3+a4*x^4+a5*x^5 .

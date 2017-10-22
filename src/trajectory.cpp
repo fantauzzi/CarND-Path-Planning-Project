@@ -1,4 +1,4 @@
-#include "Eigen/QR"
+#include "Eigen-3-3-4/Eigen/QR"
 #include <cmath>
 #include "trajectory.h"
 
