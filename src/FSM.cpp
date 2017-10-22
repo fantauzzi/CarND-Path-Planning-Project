@@ -105,7 +105,7 @@ double cost(
 				const double d_value= abs(evalQuintic(d_diff, t));
 				sd_values[i]=sqrt(pow(s_value,2)+pow(d_value,2));
 				if (deg==1)
-					s_vel_values[i]= s_value;
+					s_vel_values[i]= evalQuintic(s_diff, t);
 			}
 			sd_tabulated.push_back(std::move(sd_values));
 			if (deg==1)
@@ -391,12 +391,12 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 				// Would I make it past s_p?
 				if (s_final >= s_p) {
 					// Then just plan to reach s_p
-					s_goal << s_p, prec_car_v, 0;
-					cout << "### Cannot reach s_p at v_c speed s_final=" << s_final << " s_p="<< s_p << endl;
+					s_goal << s_p, min(max(v_c, .1), prec_car_v), 0;
+					cout << "### Reaching s_p at v_c speed s_final=" << s_final << " s_p="<< s_p << endl;
 				}
 				else {
 					// Otherwise plan to go on at constant speed
-					s_goal << s_final, max(v_c, 1.), 0;
+					s_goal << s_final, max(v_c, .1), 0;  // max() is to not allow the car to completely stop
 					cout << "### Just continuing at constant speed s_final=" << s_final << " s_c=" << s_c << endl;
 				}
 			}

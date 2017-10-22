@@ -1,6 +1,8 @@
 # Path Planning Project
 Self-Driving Car Engineer Nanodegree Program
 
+![image2]
+
 ## Goals
 In this project my goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. I am provided with the car's localization and sensor fusion data, and also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
 
@@ -42,6 +44,11 @@ See file `README_sim_info.txt` for more information on how the simulation works.
 
 I have used the spline function provided [here](http://kluge.in-chemnitz.de/opensource/spline/) and [Eigen 3.3.4](http://eigen.tuxfamily.org/index.php?title=Main_Page). Source code for both are included in the present repository.
 
+[//]: # (Image References)
+
+[image1]: ./Path_planning_FSM.png "Finite State Machine"
+[image2]: ./screenshot.png "Simulator screenshot"
+
 ---
 
 ## Path Generation and Car Model
@@ -55,13 +62,17 @@ The beginning of the simulation is the only time when I compute the path startin
 A path is a trail of waypoints, that the car will gobble up at a rate of one waypoint every 0.02 seconds. Therefore, by setting the distance between waypoints, I also determine the car velocity.
 
 A Finite State Machine (FSM) encodes the car behavior. It has three possible states:
-- Keeping Lane (KL), when the car can attend its cruise speed, unhampered by other vehicles.
-- Following Car (FC), when the car is keeping distance from a preceding vehicle in the same lane.
-- Changing Lane (CL), when the car is moving from one lane to an adjacent one.
+- Keep Lane (KL), when the car can attend its cruise speed, unhampered by other vehicles.
+- Follow Vehicle (FV), when the car is keeping distance from a preceding vehicle in the same lane.
+- ChangeLane (CL), when the car is moving from one lane to an adjacent one.
 
-At every iteration (i.e. update from the simulator), I determine if the car should remain in the current state, or switch to a different one, based on a set of rules. For instance, if the car is in FC (Following Car)), and a nearby lane has no traffic, or the traffic is faster, and there is a gap to merge in, then switch to CL (Change Lane) state.
+![image1]
 
-When it is time to compute a new path, extending the current one, I do it based on the current FSM state. I first determine where the path should end, say as forward as possible in the current lane (KL), as close as possible to a set distance from the preceding vehicle (FC), or forward and in an adjacent lane (CL). The exact position of the path end is based on a simple [kinematic model](https://www.khanacademy.org/science/physics/one-dimensional-motion/kinematic-formulas/a/what-are-the-kinematic-formulas) of the car, which is good enough for driving along the highway.
+At every iteration (i.e. update from the simulator), I determine if the car should remain in the current state, or switch to a different one, based on a set of rules. For instance, if the car is in FV (Follow Vehicle), and a nearby lane has no traffic, or the traffic is faster, and there is a gap to merge in, then switch to CL (Change Lane) state.
+
+Note that the state may switch multiple times in a row, during the iteration. E.g. at the end of a lane change the state goes from CL to KL, but if there is an obstructing (slower) vehicle on the new lane, then the state changes to FV right away. 
+
+When it is time to compute a new path, extending the current one, I do it based on the current FSM state. I first determine where the path should end, say as forward as possible in the current lane (KL), as close as possible to a set distance from the preceding vehicle (FV), or forward and in an adjacent lane (CL). The exact position of the path end is based on a simple [kinematic model](https://www.khanacademy.org/science/physics/one-dimensional-motion/kinematic-formulas/a/what-are-the-kinematic-formulas) of the car, which is good enough for driving along the highway.
 
 I then calculate a Jerk Minimising Trajectory (JMT), which is basically a quintic polynomial, going from the beginning of the new path (i.e. the end of the previous one), to its end. The JMT ensures that the car will be in a set position, velocity and acceleration at the end-points of the path, and also gives guarantees of continuity of the position and its first two derivatives. However, it does not give any other guarantee  (beside continuity) about velocity, acceleration and jerk *between* the endpoints.
 
