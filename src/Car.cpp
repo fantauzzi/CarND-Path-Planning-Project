@@ -6,16 +6,6 @@
 
 using namespace std;
 
-// Should the function below be a method of FrenetCartesianConverter?
-/*
- Coordinates calculateFrenetVelocity(const FrenetCartesianConverter & converter, const double s, const double speed, const double yaw)  {
-	double road_h = converter.getRoadHeading(s);
-	double car_vel_s= speed *cos(yaw - road_h);
-	double car_vel_d= -speed*sin(yaw - road_h); // d=0 on the yellow center line, and increases toward the outer of the track
-	return { car_vel_s, car_vel_d };
-}
-*/
-
 double measureSeparation(const double this_car_s, const double other_car_s) {
 	double sep= other_car_s -this_car_s;
 
@@ -28,7 +18,7 @@ double measureSeparation(const double this_car_s, const double other_car_s) {
 	return sep;
 }
 
-CarSensorData::CarSensorData(vector<double> sensorInfo, const FrenetCartesianConverter & the_converter):
+CarSensorData::CarSensorData(const vector<double> sensorInfo, const FrenetCartesianConverter & the_converter):
 		id(static_cast<unsigned>(sensorInfo[0])),
 		x(sensorInfo[1]),
 		y(sensorInfo[2]),
@@ -59,33 +49,6 @@ double CarSensorData::getYaw() const {
 		yaw += 2*pi();
 	return yaw;
 }
-
-
-//Coordinates CarSensorData::getFrenetVelocity() const {
-//	return calculateFrenetVelocity(converter, s, getSpeed(), getYaw());
-	/*double road_h = converter.getRoadHeading(s);
-	double car_vel_s= getSpeed() *cos(getYaw() - road_h);
-	double car_vel_d= -getSpeed()*sin(getYaw() - road_h); // d=0 on the yellow center line, and increases toward the outer of the track
-	return { car_vel_s, car_vel_d };*/
-//}
-
-/*
-Coordinates CarSensorData::predictFrenet(double dt) const {
-	const auto sd_vel = getFrenetVelocity();
-	const double s_pred = s+sd_vel.first * dt;
-	const double d_pred = d+sd_vel.second * dt;
-	return { s_pred, d_pred };
-}*/
-
-/* double CarSensorData::measureSeparationFrom(const double other_s) const {
-	double sep= other_s -s;
-
-	// Handle the case where this car are the other car are on opposite side of the line s=0
-	if (sep < -ConfigParams::max_s/2 || sep > ConfigParams::max_s/2)
-		sep = ConfigParams::max_s-sep;
-
-	return sep;
-}*/
 
 Car::Car(const FrenetCartesianConverter & converter_ini): s(.0), d(.0), x(.0), y(.0), yaw(.0), speed(.0), converter(converter_ini) {
 

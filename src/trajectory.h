@@ -16,5 +16,11 @@ typedef Eigen::Matrix<double, 6, 1> Vector6d;
  */
 Vector6d computeJMT(const Eigen::Vector3d start, const Eigen::Vector3d goal, double t);
 
+/**
+ * Evaluates a given quintic polynomial for the given value
+ * @param coeffs coefficients of the quintic polynomial, ordered starting from the one of degree 0.
+ * @param x the given point, where to evaluate the polynomial.
+ * @return the quintic polynomial value in `x`
+ */
 double evalQuintic(Vector6d coeffs, double x);
 

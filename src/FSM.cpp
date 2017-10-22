@@ -14,6 +14,12 @@
 using namespace std;
 using namespace Eigen;
 
+/**
+ * Checks if two numbers are close enough to be considered the same.
+ * @param a one of the two given numbers.
+ * @param b the other given number.
+ * @return true if the difference in absolute value between the two numbers is within tolerance of 0.001, false otherwise.
+ */
 bool close_enough(const double a, const double b) {
 	constexpr double tollerance = 0.001;
 	if (abs(a - b) <= tollerance)
@@ -21,6 +27,11 @@ bool close_enough(const double a, const double b) {
 	return false;
 }
 
+/**
+ * Determines the `d` coordinate in a Frenet reference system for the given lane.
+ * @param lane the given lane; it's numbered as 0, 1 or 2.
+ * @return the requested `d` coordinate.
+ */
 double d_forLane(const unsigned lane) {
 	switch(lane) {
 	case 0:
@@ -28,7 +39,10 @@ double d_forLane(const unsigned lane) {
 	case 1:
 		return 6;
 	case 2:
-		return 9.8;  // Instead of 10, because of inaccuracies in Frenet/Cartesian conversion
+		/* Instead of 10, return a value slightly closer to the middle of the road; otherwise the simulator
+		 * reports from time to time that the car is off-road, while visually that is not the case.
+		 */
+		return 9.8;
 	default:
 		assert(0);
 	}
@@ -37,13 +51,24 @@ double d_forLane(const unsigned lane) {
 
 }
 
+/**
+ * Finds in a given lane the closest preceding or following vehicle (if any) to the given Frenet coordinates.
+ * @param sd Frenet coordinates as a pair <s, d>.
+ * @param cars sensors provided information about the other vehicles on the same road.
+ * @param lane the lane of interest.
+ * @param preceding true if the closest preceding vehicle is wanted, false if the closes following vehicle is wanted.
+ * @param lane_width the lane width in meters.
+ * @return a pair <index, distance> where `index` is the position in the given `cars` vector of the found vehicle, -1 if no
+ * vehicle was found at all, and `distance` is the distance with sign (positive for a preceding car) of the found vehicle,
+ * numeric_limits<double>::max() if none was found.
+ */
 pair<double, double> findClosestInLane(Coordinates sd,  vector<CarSensorData> cars, unsigned lane, bool preceding, double lane_width ) {
 	int closest_i= -1;  // Will be the position in cars[] of the found vehicle (if found)
 	double closest_dist=  numeric_limits<double>::max();
 	int sign= (preceding)? 1: -1;
 	for (unsigned i=0; i<cars.size(); ++i)  {
 		double separation = -sign*measureSeparation(cars[i].s, sd.first);
-		if (separation >=0 && separation < closest_dist && abs(cars[i].d-lane_width/2-lane_width*lane) < lane_width/2) { // TODO improve lane calculation
+		if (separation >=0 && separation < closest_dist && abs(cars[i].d-lane_width/2-lane_width*lane) < lane_width/2) {
 			closest_dist= separation;
 			closest_i=i;
 		}
@@ -56,6 +81,11 @@ double predictSeparation(const Car & this_car, const CarSensorData & other_car, 
 	return sep;
 }
 
+/**
+ * Determines the first derivative of a quintic polynomial.
+ * @param coeffs the coefficients of the quintic polynomial, starting from the one of degree 0.
+ * @return the six coefficients of the requested polynomial; the last one is always 0.
+ */
 Vector6d differentiate (const Vector6d coeffs) {
 	Vector6d res;
 	for (unsigned i=0; i<5; ++i)
@@ -129,6 +159,10 @@ double cost(
 	return acc_cost+jerk_cost+speed_cost+neg_s_vel_cost;
 
 }
+
+/****************************************************************************************/
+/* Note: functions and member function declared in the header file are there documented */
+/****************************************************************************************/
 
 FSM_State::FSM_State(const Car car_init, const std::vector<CarSensorData> cars_init):
 	car(car_init), cars(cars_init), boundary_conditions_initialised(false) {
