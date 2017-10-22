@@ -58,7 +58,3 @@ unsigned Car::getLane() const {
 	auto lane = floor(d/ConfigParams::lane_width);
 	return static_cast<unsigned>(lane);
 }
-
-/*Coordinates Car::getFrenetVelocity() const {
-	return calculateFrenetVelocity(converter, s, speed, yaw);
-}*/

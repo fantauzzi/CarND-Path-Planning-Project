@@ -23,8 +23,6 @@ using namespace ConfigParams;
 // for convenience
 using json = nlohmann::json;
 
-// Yes, the lane width
-// constexpr double lane_width = 4;
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -41,11 +39,6 @@ string hasData(string s) {
 	return "";
 }
 
-// Keep lane, prepare to change lane left, prepare to change lane right, change lane left, change lane right
-enum struct CarState {
-	KL, PLCL, PLCR, CLL, CLR
-};
-
 int main() {
 	uWS::Hub h;
 
@@ -59,7 +52,6 @@ int main() {
 	// Waypoint map to read from
 	string map_file_ =
 			"/home/fanta/workspace/CarND-Path-Planning-Project/data/highway_map.csv";
-	// The max s value before wrapping around the track back to 0
 
 	ifstream in_map_(map_file_.c_str(), ifstream::in);
 
@@ -92,9 +84,6 @@ int main() {
 	FrenetCartesianConverter coord_conv(map_waypoints_s, map_waypoints_x,
 			map_waypoints_y, map_waypoints_dx, map_waypoints_dy);
 
-	// ofstream log_file;
-	// log_file.open ("/home/fanta/workspace/CarND-Path-Planning-Project/data/log.txt");
-
 	auto converter= FrenetCartesianConverter(map_waypoints_s, map_waypoints_x, map_waypoints_y, map_waypoints_dx, map_waypoints_dy);
 	Car car(converter);
 	vector<CarSensorData> cars;
@@ -117,20 +106,8 @@ int main() {
 					string event = j[0].get<string>();
 
 					if (event == "telemetry") {
-						/* - Sense and predict, to anticipate where other cars are gonna be when I reach the end of the current JMT
-						 * - Run the FSM and determine the state for the current iteration.
-						 * - Based on the state, compute one or more trajectories.
-						 * - Choose the trajectory with the lowest cost.
-						 * - Send it to the simulator
-						 */
-
-						// Based on the state, compute one or more trajectories
-
 						auto current_t = std::chrono::high_resolution_clock::now();
 						std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(current_t - prev_t);
-						// double delta_t = time_span.count();
-						// double delta_t = 0.05;
-						// cout << "Delta-t= " << delta_t << endl;
 						prev_t = current_t;
 
 						// Main car's localization Data
@@ -182,8 +159,7 @@ int main() {
 						// Time left before the car will gobble up the current path (in seconds)
 						const double remaining_path_duration = car.path_x.size()*tick;
 
-						// =============================
-
+						// Get the next car state from the FSM
 						bool state_changed;
 						do {
 							state_changed=false;
@@ -192,7 +168,8 @@ int main() {
 								pState.reset(pTmp);
 								state_changed= true;
 							}
-						} while(state_changed);
+						} while(state_changed);  // As long as the state has changed, check if it must be changed again.
+
 						if (remaining_path_duration < min_trajectory_duration) {
 							cout << endl << "Iteration# " << iterations << " =========================================== " << endl;
 							cout << "s=" << car.s << " d=" << car.d << " yaw=" << rad2deg(car.yaw) << endl;
@@ -208,6 +185,7 @@ int main() {
 							 * and store them in Cartesian (universal) coordinates. We want one waypoint at the end of every tick,
 							 * from time 0 to time planning_t
 							 */
+
 							vector<pair<double, double>> wpoints; // Will hold the sampled waypoints
 							vector<double> ss;
 							unsigned n_planning_wpoints=static_cast<int>(round(pState->getPlanningTime() / tick));
@@ -249,7 +227,6 @@ int main() {
 
 						++iterations;
 
-						//this_thread::sleep_for(chrono::milliseconds(1000));
 						ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
 					}
 				} else {
@@ -269,7 +246,6 @@ int main() {
 		if (req.getUrl().valueLength == 1) {
 			res->end(s.data(), s.length());
 		} else {
-			// I guess this should be done more gracefully?
 			res->end(nullptr, 0);
 		}
 	});

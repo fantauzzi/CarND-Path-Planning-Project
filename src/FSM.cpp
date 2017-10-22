@@ -14,12 +14,6 @@
 using namespace std;
 using namespace Eigen;
 
-/**
- * Checks if two numbers are close enough to be considered the same.
- * @param a one of the two given numbers.
- * @param b the other given number.
- * @return true if the difference in absolute value between the two numbers is within tolerance of 0.001, false otherwise.
- */
 bool close_enough(const double a, const double b) {
 	constexpr double tollerance = 0.001;
 	if (abs(a - b) <= tollerance)
@@ -51,17 +45,6 @@ double d_forLane(const unsigned lane) {
 
 }
 
-/**
- * Finds in a given lane the closest preceding or following vehicle (if any) to the given Frenet coordinates.
- * @param sd Frenet coordinates as a pair <s, d>.
- * @param cars sensors provided information about the other vehicles on the same road.
- * @param lane the lane of interest.
- * @param preceding true if the closest preceding vehicle is wanted, false if the closes following vehicle is wanted.
- * @param lane_width the lane width in meters.
- * @return a pair <index, distance> where `index` is the position in the given `cars` vector of the found vehicle, -1 if no
- * vehicle was found at all, and `distance` is the distance with sign (positive for a preceding car) of the found vehicle,
- * numeric_limits<double>::max() if none was found.
- */
 pair<double, double> findClosestInLane(Coordinates sd,  vector<CarSensorData> cars, unsigned lane, bool preceding, double lane_width ) {
 	int closest_i= -1;  // Will be the position in cars[] of the found vehicle (if found)
 	double closest_dist=  numeric_limits<double>::max();
@@ -119,8 +102,6 @@ double cost(
 	const unsigned n_intervals= static_cast<unsigned>(round(time_interval/delta_t));
 
 	// Will hold information about trajectory variations
-	// vector<vector<double>> s_tabulated;
-	// vector<vector<double>> d_tabulated;
 	vector<vector<double>> sd_tabulated;  // the modulus of the vector (s, d)
 	vector<double> s_vel_tabulated; // the velocity of s (with sign)
 
@@ -154,10 +135,7 @@ double cost(
 	const double speed_cost = (sd_max[0] > ConfigParams::speed_limit*.98)? 500: 0;
 	const double neg_s_vel_cost = (s_vel_min <=0)? 1000: 0;
 
-	// cout << "Costs: acc=" << acc_cost << " jerk=" << jerk_cost << " speed=" << speed_cost << " neg vel=" << neg_s_vel_cost << endl;
-
 	return acc_cost+jerk_cost+speed_cost+neg_s_vel_cost;
-
 }
 
 /****************************************************************************************/
@@ -192,7 +170,9 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 	if (abs(a_over_dist) > ConfigParams::max_accel_s and ! close_enough(abs(a_over_dist), ConfigParams::max_accel_s))
 		cout << "***** Planned acc. over max: " << a_over_dist << endl;
 
-	// Compute the quintic polynomial (JMT) coefficients, for the given boundary conditions and planning time interval
+	/* Compute the quintic polynomial (JMT) coefficients, for the given boundary conditions
+	 * and planning time interval.
+	 */
 
 	// Generate additional random boundary conditions and the corresponding JMTs
 
@@ -230,13 +210,19 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 		prev_y=y;
 	}
 
+	/* Correct sJMT[] based on the error in converting Frenet distances to Cartesian distances.
+	 * Otherwise, distances (and velocities) are under-estimated when on the outher lane of a bend.
+	 */
 	double dist_ratio= sd_dist/xy_dist;
 	cout << "Distance ratio Frenet/Cartesian= " << dist_ratio << endl;
-
 	sJMT[0]*= dist_ratio;
 
 	const double half_interval= .5*(abs(s_goal[0] - s_start[0]))*ConfigParams::sampling_interval;
 	uniform_real_distribution<double> distribution(s_goal[0]-half_interval, s_goal[0]+half_interval);
+
+	/* Determine the cost of generated trajectories.
+	 *
+	 */
 
 	for (unsigned i=0; i< ConfigParams::n_trajectories-1; ++i) {
 		const double s_variation= distribution(ConfigParams::rng);
@@ -248,11 +234,9 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 		dJMT_variations.push_back(dJMT);
 	}
 
-	// Determine their costs
 	// Choose the JMT with minimum cost
 	double min_cost= numeric_limits<double>::max();
 	unsigned min_cost_i;
-
 	for (unsigned i=0; i<ConfigParams::n_trajectories; ++i) {
 		const double theCost=cost(sJMT_variations[i], dJMT_variations[i], getPlanningTime());
 		if (theCost < min_cost) {
@@ -373,8 +357,6 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 	const double time_to_trajectory_end= car.path_x.size()*ConfigParams::tick;
 	const double prec_car_s_est= preceding.s+prec_car_v*(time_to_trajectory_end + getPlanningTime());
 
-
-
 	// Determine wanted s coordinate for this car at the end of the next planning interval
 
 	double s_p= prec_car_s_est - ConfigParams::safe_distance;  // s pursuit: the s coordinate of the spot I want to reach
@@ -425,7 +407,7 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 				// Would I make it past s_p?
 				if (s_final >= s_p) {
 					// Then just plan to reach s_p
-					s_goal << s_p, min(max(v_c, .1), prec_car_v), 0;
+					s_goal << s_p, min(max(v_c, .1), prec_car_v), 0;  // max() not to allow the car to completely stop
 					cout << "### Reaching s_p at v_c speed s_final=" << s_final << " s_p="<< s_p << endl;
 				}
 				else {
@@ -535,5 +517,3 @@ pair<Vector3d, Vector3d> ChangeLane::computeGoalBoundaryConditions() {
 
 	return {s_goal, d_goal};
 }
-
-
