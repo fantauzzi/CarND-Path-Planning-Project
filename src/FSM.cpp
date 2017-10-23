@@ -165,10 +165,10 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 	Vector3d s_goal= b_cond.first;
 	Vector3d d_goal= b_cond.second;
 
-	double dist= s_goal[0]-s_start[0];
-	double a_over_dist= 2/pow(getPlanningTime(),2)*(dist-s_start[1]*getPlanningTime());
-	if (abs(a_over_dist) > ConfigParams::max_accel_s and ! close_enough(abs(a_over_dist), ConfigParams::max_accel_s))
-		cout << "***** Planned acc. over max: " << a_over_dist << endl;
+	// double dist= s_goal[0]-s_start[0];
+	// double a_over_dist= 2/pow(getPlanningTime(),2)*(dist-s_start[1]*getPlanningTime());
+	// if (abs(a_over_dist) > ConfigParams::max_accel_s and ! close_enough(abs(a_over_dist), ConfigParams::max_accel_s))
+	//	cout << "***** Planned acc. over max: " << a_over_dist << endl;
 
 	/* Compute the quintic polynomial (JMT) coefficients, for the given boundary conditions
 	 * and planning time interval.
@@ -185,8 +185,8 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 	auto dJMT = computeJMT(d_start, d_goal, getPlanningTime());
 	sJMT_variations.push_back(sJMT);
 	dJMT_variations.push_back(dJMT);
-	cout << "sJMT= " << sJMT.transpose() << endl << endl;
-	cout << "dJMT= " << dJMT.transpose() << endl << endl;
+	// cout << "sJMT= " << sJMT.transpose() << endl << endl;
+	// cout << "dJMT= " << dJMT.transpose() << endl << endl;
 
 	double sd_dist=0;
 	double xy_dist=0;
@@ -214,7 +214,7 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 	 * Otherwise, distances (and velocities) are under-estimated when on the outher lane of a bend.
 	 */
 	double dist_ratio= sd_dist/xy_dist;
-	cout << "Distance ratio Frenet/Cartesian= " << dist_ratio << endl;
+	// cout << "Distance ratio Frenet/Cartesian= " << dist_ratio << endl;
 	sJMT[0]*= dist_ratio;
 
 	const double half_interval= .5*(abs(s_goal[0] - s_start[0]))*ConfigParams::sampling_interval;
@@ -236,7 +236,7 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 
 	// Choose the JMT with minimum cost
 	double min_cost= numeric_limits<double>::max();
-	unsigned min_cost_i;
+	unsigned min_cost_i=0;
 	for (unsigned i=0; i<ConfigParams::n_trajectories; ++i) {
 		const double theCost=cost(sJMT_variations[i], dJMT_variations[i], getPlanningTime());
 		if (theCost < min_cost) {
@@ -245,8 +245,8 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 		}
 	}
 
-	cout << "Min cost JMT is # " << min_cost_i << " with cost= " << min_cost;
-	cout << " Default cost was=" << cost(sJMT_variations[0], dJMT_variations[0], getPlanningTime()) << endl;
+	// cout << "Min cost JMT is # " << min_cost_i << " with cost= " << min_cost;
+	// cout << " Default cost was=" << cost(sJMT_variations[0], dJMT_variations[0], getPlanningTime()) << endl;
 
 	// Update the boundary conditions to be used at the next iteration
 	last_s_boundary_conditions = s_goal_variations[min_cost_i];
@@ -254,12 +254,14 @@ pair<Vector6d, Vector6d> FSM_State::generateTrajectory() {
 		last_s_boundary_conditions[0]-= ConfigParams::max_s;
 	last_d_boundary_conditions = d_goal;
 
+	/*
 	cout << "Final boundary conditions, s and d goal:" << endl;
 	cout << s_goal_variations[min_cost_i].transpose() << endl;
 	cout << d_goal.transpose() << endl;
 	cout << "Final JMTs, s and d:" << endl;
 	cout << sJMT_variations[min_cost_i].transpose() << endl;
 	cout << dJMT_variations[min_cost_i].transpose() << endl;
+	*/
 
 	return {sJMT_variations[min_cost_i], dJMT_variations[min_cost_i]};
 }
@@ -371,23 +373,23 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 
 	if (s_p < 0)  // Adjust in case s_p is before s=0
 		s_p+= ConfigParams::max_s;
-	cout << "s_p= " << s_p << endl;
+	// cout << "s_p= " << s_p << endl;
 
 	// If it is requested to go backward, then just decelerate as much as allowed
 	if (s_p <= s_start[0]) {
 		const double a_max= -ConfigParams::max_accel_s;
 		s_goal << s_start[0]+s_start[1]*getPlanningTime()+.5*a_max*pow(getPlanningTime(),2), max(s_start[1]+a_max*getPlanningTime(), 1.), a_max;
-		cout << "### Got s_p <=s_start[0] s_p=" << s_p << " s_start[0]=" << s_start[0] << endl;
+		// cout << "### Got s_p <=s_start[0] s_p=" << s_p << " s_start[0]=" << s_start[0] << endl;
 	}
 	else {
 		// Acceleration needed to reach s pursuit in getPlanningTime() seconds.
 		const double a_to_reach_s_p= 2/pow(getPlanningTime(),2)*(s_p-s_start[0]-s_start[1]*getPlanningTime());
-		cout << "a_to_reach_s_p= " << a_to_reach_s_p << endl;
+		// cout << "a_to_reach_s_p= " << a_to_reach_s_p << endl;
 		// Can I afford that acceleration?
 		if (abs(a_to_reach_s_p) <= ConfigParams::max_accel_s) {
 			// If yes, then just do it!
 			s_goal << s_p, prec_car_v, 0;
-			cout << "### Can afford max acc a_to_reach_s_p="<< a_to_reach_s_p << endl;
+			// cout << "### Can afford max acc a_to_reach_s_p="<< a_to_reach_s_p << endl;
 		}
 		else {
 			// If not, see how far I go with the highest (or lowest) acceleration I can afford, before hitting max speed or stopping
@@ -396,43 +398,43 @@ pair<Vector3d, Vector3d> FollowCar::computeGoalBoundaryConditions() {
 			const double s_c= s_start[0]+(pow(v_c,2)-pow(s_start[1],2))/(2*a_max);
 			const double det= max(pow(s_start[1],2)-2*(s_start[0]-s_c)*a_max, .0);
 			// How much time to reach s_c?
-			cout << "det= " << det << " pow(s_start[1],2)=" << pow(s_start[1],2) << " 2*(s_start[0]-s_c)*a_max=" << 2*(s_start[0]-s_c)*a_max;
-			cout << " s_start[1]" << s_start[1] << " s_start[0]" << s_start[0] << endl;
+			// cout << "det= " << det << " pow(s_start[1],2)=" << pow(s_start[1],2) << " 2*(s_start[0]-s_c)*a_max=" << 2*(s_start[0]-s_c)*a_max;
+			// cout << " s_start[1]" << s_start[1] << " s_start[0]" << s_start[0] << endl;
 			const double t_c= (-s_start[1]+sqrt(det))/a_max;
-			cout << "a_max=" << a_max << " v_c=" << v_c << " s_c=" << s_c << " t_c=" << t_c << endl;
+			// cout << "a_max=" << a_max << " v_c=" << v_c << " s_c=" << s_c << " t_c=" << t_c << endl;
 			if (t_c < 0)
 				cout << "*** t_c is negative! t_c=" << t_c << endl;
 			// Can I make it to s_c by the end of the planning time interval?
 			if (t_c >  getPlanningTime()) {
 				// If not, just keep accelerating until the end of the planning time interval
 				s_goal << s_start[0]+s_start[1]*getPlanningTime()+.5*a_max*pow(getPlanningTime(),2), s_start[1]+a_max*getPlanningTime(), a_max;
-				cout << "### Cannot make it to s_c t_c=" << t_c << " getPlanningTime()=" << getPlanningTime() << endl;
+				// cout << "### Cannot make it to s_c t_c=" << t_c << " getPlanningTime()=" << getPlanningTime() << endl;
 			}
 			else {
 				// If yes, calculate until where I carry on proceeding at v_c speed after I reach s_c
 				const double s_final= s_c+v_c * (getPlanningTime()-t_c);
-				cout << "s_final=" << s_final << endl;
+				// cout << "s_final=" << s_final << endl;
 				// Would I make it past s_p?
 				if (s_final >= s_p) {
 					// Then just plan to reach s_p
 					s_goal << s_p, min(max(v_c, .1), prec_car_v), 0;  // max() not to allow the car to completely stop
-					cout << "### Reaching s_p at v_c speed s_final=" << s_final << " s_p="<< s_p << endl;
+					// cout << "### Reaching s_p at v_c speed s_final=" << s_final << " s_p="<< s_p << endl;
 				}
 				else {
 					// Otherwise plan to go on at constant speed
 					s_goal << s_final, max(v_c, .1), 0;  // max() is to not allow the car to completely stop
-					cout << "### Just continuing at constant speed s_final=" << s_final << " s_c=" << s_c << endl;
+					// cout << "### Just continuing at constant speed s_final=" << s_final << " s_c=" << s_c << endl;
 				}
 			}
 		}
 	}
 
-	cout << "FollowCar s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
+	// cout << "FollowCar s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
-	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
+	// Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
 	Vector3d d_goal;// Goal conditions for d
 	d_goal << d_forLane(car.getLane()), 0, 0;
-	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
+	// cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
 	return { s_goal, d_goal };
 }
@@ -478,12 +480,12 @@ pair<Vector3d, Vector3d> KeepLane::computeGoalBoundaryConditions() {
 		double s2= (getPlanningTime() - tx) * target_speed_s;
 		s_goal << s1+s2, target_speed_s, 0;
 	}
-	cout << "KeepLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
+	// cout << "KeepLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
-	Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
+	// Vector3d d_start = last_d_boundary_conditions; // Initial conditions for d
 	Vector3d d_goal;// Goal conditions for d
 	d_goal << d_forLane(car.getLane()), 0, 0;
-	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
+	// cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
 	return { s_goal, d_goal };
 }
@@ -491,7 +493,7 @@ pair<Vector3d, Vector3d> KeepLane::computeGoalBoundaryConditions() {
 
 ChangeLane::ChangeLane(const Car & car_init, const std::vector<CarSensorData> cars_init, const unsigned target_lane_init):
 		FSM_State(car_init, cars_init), target_lane(target_lane_init) {
-	cout << "Instantiated ChangeLane with target_lane= "<< target_lane_init << endl;
+	// cout << "Instantiated ChangeLane with target_lane= "<< target_lane_init << endl;
 }
 
 FSM_State * ChangeLane::getNextState(const Car & theCar, const std::vector<CarSensorData> theCars) {
@@ -517,11 +519,11 @@ pair<Vector3d, Vector3d> ChangeLane::computeGoalBoundaryConditions() {
 	const double s_to_travel= sqrt(pow(hypotenuse,2) - pow(cat, 2));
 
 	s_goal << s_start[0]+s_to_travel, s_start[1], 0;
-	cout << "ChangeLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
+	// cout << "ChangeLane s start and goal" << endl << s_start.transpose() << endl << s_goal.transpose() << endl;
 
 	Vector3d d_goal;// Goal conditions for d
 	d_goal << d_forLane(target_lane), 0, 0;
-	cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
+	// cout << "d start and goal" << endl << d_start.transpose() << endl << d_goal.transpose() << endl;
 
 	return {s_goal, d_goal};
 }

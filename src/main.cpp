@@ -171,9 +171,9 @@ int main() {
 						} while(state_changed);  // As long as the state has changed, check if it must be changed again.
 
 						if (remaining_path_duration < min_trajectory_duration) {
-							cout << endl << "Iteration# " << iterations << " =========================================== " << endl;
-							cout << "s=" << car.s << " d=" << car.d << " yaw=" << rad2deg(car.yaw) << endl;
-							cout << "speed=" << car.speed << endl;
+							// cout << endl << "Iteration# " << iterations << " =========================================== " << endl;
+							// cout << "s=" << car.s << " d=" << car.d << " yaw=" << rad2deg(car.yaw) << endl;
+							// cout << "speed=" << car.speed << endl;
 
 							// Determine boundary conditions for quintic polynomial (car trajectory in Frenet coordinates)
 
@@ -189,22 +189,22 @@ int main() {
 							vector<pair<double, double>> wpoints; // Will hold the sampled waypoints
 							vector<double> ss;
 							unsigned n_planning_wpoints=static_cast<int>(round(pState->getPlanningTime() / tick));
-							double previous_s =-1;
-							bool going_backward= false;
+							// double previous_s =-1;
+							// bool going_backward= false;
 							for (unsigned i_wpoint=0; i_wpoint<n_planning_wpoints; ++i_wpoint) {
 								double wpoint_t= tick*(i_wpoint+1);
 								double next_s= evalQuintic(sJMT, wpoint_t);
 								ss.push_back(next_s);
-								if (next_s < previous_s && !close_enough(next_s, previous_s))
-									going_backward= true;
-								previous_s= next_s;
+								// if (next_s < previous_s && !close_enough(next_s, previous_s))
+									// going_backward= true;
+								// previous_s= next_s;
 								double next_d= evalQuintic(dJMT, wpoint_t);
 								auto xy= coord_conv.getXY(next_s, next_d);
 								wpoints.push_back(xy);
 							}
 							assert(wpoints.size()==n_planning_wpoints);
-							if (going_backward)
-								cout << "**** Going backward!" << endl;
+							/* if (going_backward)
+								cout << "**** Going backward!" << endl; */
 
 							// Next add waypoints from the just computed JMT
 
@@ -214,7 +214,7 @@ int main() {
 							}
 						auto current_t_end = std::chrono::high_resolution_clock::now();
 						std::chrono::duration<double> iter_time_span = std::chrono::duration_cast<std::chrono::duration<double>>(current_t_end - current_t);
-						cout << "Computation time(s): " << iter_time_span.count() << endl;
+						// cout << "Computation time(s): " << iter_time_span.count() << endl;
 
 						} // if (remaining_path_duration < min_trajectory_duration)
 
